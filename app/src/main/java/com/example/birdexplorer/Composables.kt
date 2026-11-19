@@ -317,7 +317,8 @@ fun SightingsScreen(
 
 @Composable
 fun PublishSightingScreen(
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onPublish: (String, String, String) -> Unit
 ) {
     var species by remember { mutableStateOf("") }
     var location by remember { mutableStateOf("") }
@@ -365,9 +366,8 @@ fun PublishSightingScreen(
         // Botón de publicación
         Button(
             onClick = {
-                // Más adelante publicaremos mediante MQTT
+                onPublish(species, location, notes)
             },
-            modifier = Modifier.fillMaxWidth(),
             enabled = species.isNotBlank() && location.isNotBlank()
         ) {
             Text("Publish")
@@ -382,14 +382,9 @@ fun PublishSightingScreen(
 
 @Composable
 fun ViewSightingsScreen(
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    sightings: List<Sighting>
 ) {
-    // Avistamientos de prueba
-    val sightings = listOf(
-        "European Robin - Madrid - 18/11/2026",
-        "House Sparrow - Getafe - 18/11/2026",
-        "Common Blackbird - Alcalá de Henares - 17/11/2026"
-    )
 
     Column(
         modifier = Modifier
@@ -414,7 +409,7 @@ fun ViewSightingsScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = sighting,
+                        text = "${sighting.species} - ${sighting.location}",
                         modifier = Modifier.padding(16.dp),
                         style = MaterialTheme.typography.bodyMedium
                     )
