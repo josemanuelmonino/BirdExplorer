@@ -4,13 +4,13 @@ plugins {
 }
 
 android {
-    namespace = "dte.masteriot.birdexplorer"
+    namespace = "com.example.birdexplorer"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "dte.masteriot.birdexplorer"
+        applicationId = "com.example.birdexplorer"
         minSdk = 24
         targetSdk = 37
         versionCode = 1
@@ -38,12 +38,14 @@ android {
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.compose.foundation.layout)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.material3)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
@@ -52,6 +54,10 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
     implementation(libs.androidx.navigation.compose)
-    implementation(libs.androidx.lifecycle.viewmodel.compose)
-    implementation(libs.osmdroid.android)
+    implementation(platform(libs.mqtt.client.bom))
+    implementation(libs.mqtt.client.core)
+    implementation(libs.mqtt.client.transport.tcp)
+    implementation(libs.ktor.client.core)
+    implementation(libs.kotlinx.coroutines.android)
+
 }

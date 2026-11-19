@@ -1,4 +1,4 @@
-package dte.masteriot.birdexplorer.ui.theme
+package com.example.birdexplorer.ui.theme
 
 import android.app.Activity
 import android.os.Build

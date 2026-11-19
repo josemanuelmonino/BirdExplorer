@@ -1,4 +1,4 @@
-package dte.masteriot.birdexplorer
+package com.example.birdexplorer
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -11,35 +11,24 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import dte.masteriot.birdexplorer.ui.navigation.BirdExplorerNavHost
-import dte.masteriot.birdexplorer.ui.theme.BirdExplorerTheme
+import com.example.birdexplorer.data.StepSensorManager
+import com.example.birdexplorer.ui.theme.BirdExplorerTheme
 
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            BirdExplorerTheme(dynamicColor = false) {
+            BirdExplorerTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    BirdExplorerNavHost(modifier = Modifier.padding(innerPadding))
+
+                    BirdExplorerApp(
+                        modifier = Modifier.padding(innerPadding)
+                    )
+
                 }
             }
         }
-    }
-}
-
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    BirdExplorerTheme {
-        Greeting("Android")
     }
 }

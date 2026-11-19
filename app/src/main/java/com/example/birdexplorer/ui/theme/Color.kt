@@ -1,4 +1,4 @@
-package dte.masteriot.birdexplorer.ui.theme
+package com.example.birdexplorer.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

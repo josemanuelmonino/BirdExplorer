@@ -1,4 +1,4 @@
-package dte.masteriot.birdexplorer
+package com.example.birdexplorer
 
 import org.junit.Test
 
