@@ -41,15 +41,15 @@ fun BirdExplorerApp(modifier: Modifier = Modifier) {
         }
 
         composable(Screens.ExploreNearMe.name) {
-            PlaceholderScreen("Explore Near Me") {
+            MapScreen(onBack = {
                 navController.popBackStack()
-            }
+            })
         }
 
         composable(Screens.ExploreByArea.name) {
-            PlaceholderScreen("Explore by Area") {
+            MapScreen(onBack = {
                 navController.popBackStack()
-            }
+            })
         }
 
         composable(Screens.SearchSpecies.name) {

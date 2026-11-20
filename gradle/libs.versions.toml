@@ -15,6 +15,7 @@ mqttClientBom = "0.8.0"
 kotlin = "2.4.0"
 ktor = { strictly = "3.5.1" }
 coroutines = { strictly = "1.11.0" }
+osmdroid = "6.1.20"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -39,6 +40,7 @@ mqtt-client-core = { module = "org.meshtastic:mqtt-client-core" }
 mqtt-client-transport-tcp = { module = "org.meshtastic:mqtt-client-transport-tcp" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
+osmdroid-android = { group = "org.osmdroid", name = "osmdroid-android", version.ref = "osmdroid" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
