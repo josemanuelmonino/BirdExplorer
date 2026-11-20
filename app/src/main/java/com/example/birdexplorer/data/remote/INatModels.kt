@@ -2,7 +2,7 @@ package com.example.birdexplorer.data.remote
 
 import kotlinx.serialization.Serializable
 
-// A page of results from /v1/observations
+// A page of results from /v1/observations returned by the RetroFit and the API
 @Serializable
 data class ObservationsResponse(
     val total_results: Int = 0,   // total observations matching the query

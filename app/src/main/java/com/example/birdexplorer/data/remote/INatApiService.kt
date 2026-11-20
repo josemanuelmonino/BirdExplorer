@@ -3,7 +3,7 @@ package com.example.birdexplorer.data.remote
 import retrofit2.http.GET
 import retrofit2.http.Query
 
-private const val BASE_URL = "https://api.inaturalist.org/"
+const val BASE_URL = "https://api.inaturalist.org/"
 const val BIRDS_TAXON_ID = 3
 
 // main interface
@@ -31,7 +31,7 @@ interface INatApiService {
                                                             // are:
                                                             // - needs_id (yet to be confirmed)
                                                             // - casual (missing values)
-        @Query("locale") locale: String = "es",
+        @Query("locale") locale: String = "es",     // maybe it can be used placed id
         @Query("per_page") perPage: Int = 50,
         @Query("page") page: Int = 1,
         @Query("order_by") orderBy: String = "observed_on"
