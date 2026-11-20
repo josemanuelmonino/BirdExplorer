@@ -1,4 +1,5 @@
 package com.example.birdexplorer
+import com.example.birdexplorer.ui.MapScreen
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
