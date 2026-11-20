@@ -2,6 +2,10 @@ package com.example.birdexplorer.data
 
 import com.example.birdexplorer.data.remote.*
 
+import android.util.Log
+
+private const val TAG = "BirdRepository"
+
 data class BirdSighting(
     val id: Long,
     val commonName: String,
@@ -28,10 +32,13 @@ class BirdRepository(private val api: INatApiService = NetworkDataSource.service
 
     suspend fun searchSpecies(query: String) = api.searchTaxa(query).results
 
-    private fun ObservationsResponse.toSightings(): List<BirdSighting> =
-        results.mapNotNull { o ->
+    private fun ObservationsResponse.toSightings(): List<BirdSighting> {
+        Log.d(TAG, "API -> total_results=$total_results, results=${results.size}")
+        Log.d(TAG, "First geojson raw = ${results.firstOrNull()?.geojson}")
+
+        val sightings = results.mapNotNull { o ->
             val c = o.geojson?.coordinates
-            if (c == null || c.size < 2) return@mapNotNull null   // ubicación oculta
+            if (c == null || c.size < 2) return@mapNotNull null   // hidden location
             val photo = o.photos.firstOrNull() ?: o.taxon?.default_photo
             BirdSighting(
                 id = o.id,
@@ -43,4 +50,8 @@ class BirdRepository(private val api: INatApiService = NetworkDataSource.service
                 attribution = photo?.attribution
             )
         }
+
+        Log.d(TAG, "Converted -> ${sightings.size} sightings (${results.size - sightings.size} discarded)")
+        return sightings
+    }
 }
