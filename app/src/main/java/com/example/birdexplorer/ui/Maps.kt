@@ -1,10 +1,14 @@
 package com.example.birdexplorer.ui
 
+import android.graphics.Color
+import android.widget.Toast
 import com.example.birdexplorer.R
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -12,11 +16,15 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.tileprovider.tilesource.ITileSource
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Polygon
+import java.util.Locale
 
 // By default, centered around UPM Campus Sur
 val DEFAULT_CENTER = GeoPoint(40.3893, -3.6286)
@@ -44,9 +52,13 @@ fun OsmMap(
     center: GeoPoint = DEFAULT_CENTER,
     zoom: Double = DEFAULT_ZOOM,
     tileSource: ITileSource = TileSourceFactory.MAPNIK,
-    markers: List<MapMarkerItem> = emptyList()
+    markers: List<MapMarkerItem> = emptyList(),
+    circleCenter: GeoPoint? = null,
+    circleRadiusMeters: Double = 250.0,
+    onMapLongPress: ((GeoPoint) -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val currentOnLongPress by rememberUpdatedState(onMapLongPress)
 
     val mapView = remember {
         MapView(context).apply {
@@ -81,7 +93,38 @@ fun OsmMap(
                 view.setTileSource(tileSource)
             }
 
-            // to remove ONLY old markers (and not the overlay, polygons or "My Location" marker
+            // Touch events receiver
+            view.overlays.removeAll { it is MapEventsOverlay}
+            val mapEventsReceiver = object : MapEventsReceiver {
+                override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
+                    Toast.makeText(
+                        context,
+                        String.format(Locale.US, "Lat: %.4f, Lon: %.4f", p.latitude, p.longitude),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return true
+                }
+
+                override fun longPressHelper(p: GeoPoint): Boolean {
+                    currentOnLongPress?.invoke(p)
+                    return true
+                }
+            }
+            view.overlays.add(MapEventsOverlay(mapEventsReceiver))
+
+            // Search radius circle
+            view.overlays.removeAll { it is Polygon}
+            if (circleCenter != null && circleRadiusMeters > 0) {
+                val searchCircle = Polygon().apply {
+                    points = Polygon.pointsAsCircle(circleCenter, circleRadiusMeters)
+                    outlinePaint.color = Color.rgb(0, 121, 107)
+                    outlinePaint.strokeWidth = 3f
+                    fillPaint.color = Color.argb(30, 0, 121, 107)
+                }
+                view.overlays.add(0, searchCircle) //at index 0 so markers remain on top
+            }
+
+            // Remove ONLY old markers (and not the overlay, polygons or "My Location" marker
             // whenever something changes. If this wasn't done, they would be duplicated
             view.overlays.removeAll { it is Marker && it.relatedObject is MapMarkerItem}
 
