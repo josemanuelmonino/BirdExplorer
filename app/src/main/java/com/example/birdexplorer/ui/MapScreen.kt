@@ -51,8 +51,41 @@ fun MapScreen(onBack: () -> Unit) {
     var selectedStyle by rememberSaveable { mutableStateOf(MapStyle.STANDARD) } //standard style by default
     var menuExpanded by remember { mutableStateOf(false) }
 
+    //TRIAL API MARKERS REPLICATING THE API AND MQTT SAMPLES
+    val sampleMarkers = remember {
+        listOf(
+            MapMarkerItem(
+                id = "api_101",
+                title = "Gorrión común (Passer domesticus)",
+                subtitle = "Campus Sur UPM, Madrid",
+                latitude = 40.3898,
+                longitude = -3.6282,
+                type = MarkerType.API_OBSERVATION
+            ),
+            MapMarkerItem(
+                id = "api_102",
+                title = "Mirlo común (Turdus merula)",
+                subtitle = "Parque Lineal del Manzanares",
+                latitude = 40.3885,
+                longitude = -3.6296,
+                type = MarkerType.API_OBSERVATION
+            ),
+            MapMarkerItem(
+                id = "mqtt_1",
+                title = "Cotorra argentina",
+                subtitle = "Vistas 3 en los pinos junto a la cafetería",
+                latitude = 40.3901,
+                longitude = -3.6272,
+                type = MarkerType.MQTT_USER_SIGHTING
+            )
+        )
+    }
+
     Box(modifier = Modifier.fillMaxSize()){
-        OsmMap(tileSource = selectedStyle.tileSource)
+        OsmMap(
+            tileSource = selectedStyle.tileSource,
+            markers = sampleMarkers
+        )
 
         Button(
             onClick = onBack,
