@@ -27,9 +27,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,8 +46,31 @@ import kotlinx.coroutines.withContext
 import org.osmdroid.util.GeoPoint
 import java.util.Locale
 
-private const val AREA_DEFAULT_ZOOM = 12.0
+private const val AREA_INITIAL_ZOOM = 12.0
+private const val AREA_SEARCHED_ZOOM = 15.0 //when in Search by Area mode, results are shown with a
+                                            //higher zoom
 
+// Geographic bounding box covering Spain (including Canary and Balearic Islands) to avoid map search
+// leading to other countries (only info regarding bird sightings in Spain is available)
+private const val SPAIN_MIN_LAT = 27.6
+private const val SPAIN_MIN_LON = -18.2
+private const val SPAIN_MAX_LAT = 43.8
+private const val SPAIN_MAX_LON = 4.4
+
+private fun isSpecificMatchInSpain(address: android.location.Address): Boolean {
+    if (address.countryCode != null && !address.countryCode.equals("ES", ignoreCase = true)) {
+        return false
+    }
+    val feature = address.featureName?.trim().orEmpty()
+    val isOnlyCountry = feature.equals("Spain", ignoreCase = true) ||
+            feature.equals("España", ignoreCase = true)
+    return !isOnlyCountry && (
+            address.locality != null ||
+                    address.subAdminArea != null ||
+                    address.adminArea != null ||
+                    feature.isNotEmpty()
+            )
+}
 @Composable
 fun ExploreAreaScreen(
     onBack: () -> Unit,
@@ -56,7 +81,8 @@ fun ExploreAreaScreen(
     val scope = rememberCoroutineScope()
     val uiState by mapViewModel.uiState.collectAsState()
 
-    var searchQuery by remember { mutableStateOf("") }
+    var areaZoom by rememberSaveable { mutableDoubleStateOf(AREA_INITIAL_ZOOM) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
     var menuExpanded by remember { mutableStateOf(false) }
 
     fun searchAreaByName() {
@@ -64,17 +90,35 @@ fun ExploreAreaScreen(
         if (query.isEmpty()) return
         focusManager.clearFocus()
 
+        // append ", Spain" so ambiguous names, like "Retiro" (search limited to Spain)
+        val spainQuery = if (
+            query.contains("spain", ignoreCase = true) ||
+            query.contains("españa", ignoreCase = true)
+        ) {
+            query
+        } else {
+            "$query, Spain"
+        }
+
         val geocoder = Geocoder(context, Locale.getDefault())
         // Android's way of calling a place name to coordinates translator changed from API 33 (TIRAMISU; Android 13) on
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { // if API version >= 33 (TIRAMISU; Android 13)
             // asynchronous and modern version of getFromLocationName function
-            geocoder.getFromLocationName(query, 1) { addresses ->
-                val first = addresses.firstOrNull()
+            geocoder.getFromLocationName(
+                spainQuery,
+                1,
+                SPAIN_MIN_LAT,
+                SPAIN_MIN_LON,
+                SPAIN_MAX_LAT,
+                SPAIN_MAX_LON
+            ) { addresses ->
+                val first = addresses.firstOrNull()?.takeIf { isSpecificMatchInSpain(it) }
                 if (first != null) {
+                    areaZoom = AREA_SEARCHED_ZOOM
                     mapViewModel.onAreaCenterSelected(GeoPoint(first.latitude, first.longitude))
                 } else {
                     scope.launch(Dispatchers.Main) {
-                        Toast.makeText(context, "Area not found: $query", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Area not found in Spain: $query", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -83,12 +127,23 @@ fun ExploreAreaScreen(
             scope.launch {
                 val result = withContext(Dispatchers.IO) {
                     @Suppress("DEPRECATION")
-                    runCatching { geocoder.getFromLocationName(query, 1)?.firstOrNull() }.getOrNull()
+                    runCatching {
+                        geocoder.getFromLocationName(
+                            spainQuery,
+                            1,
+                            SPAIN_MIN_LAT,
+                            SPAIN_MIN_LON,
+                            SPAIN_MAX_LAT,
+                            SPAIN_MAX_LON
+                        )?.firstOrNull()
+                    }.getOrNull()
                 }
-                if (result != null) {
+                val validResult = result?.takeIf { isSpecificMatchInSpain(it) }
+                if (validResult != null) {
+                    areaZoom = AREA_SEARCHED_ZOOM
                     mapViewModel.onAreaCenterSelected(GeoPoint(result.latitude, result.longitude))
                 } else {
-                    Toast.makeText(context, "Area not found: $query", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Area not found in Spain: $query", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -99,7 +154,7 @@ fun ExploreAreaScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         OsmMap(
             center = uiState.areaCenter,
-            zoom = AREA_DEFAULT_ZOOM,
+            zoom = areaZoom,
             recenterTrigger = uiState.areaRecenterTrigger,
             tileSource = uiState.selectedStyle.tileSource,
             markers = allMarkers,
