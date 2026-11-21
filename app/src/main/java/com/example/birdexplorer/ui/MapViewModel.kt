@@ -13,6 +13,8 @@ data class MapUiState(
     val radiusMeters: Float = 500f,
     val userLocation: GeoPoint? = null,
     val recenterTrigger: Int = 0,
+    val areaCenter: GeoPoint = DEFAULT_CENTER,
+    val areaRecenterTrigger: Int = 0,
     val apiMarkers: List<MapMarkerItem> = emptyList(),
     val mqttMarkers: List<MapMarkerItem> = emptyList()
 ) {
@@ -65,6 +67,15 @@ class MapViewModel : ViewModel() {
                 userLocation = location,
                 searchCenter = location,
                 recenterTrigger = state.recenterTrigger + 1
+            )
+        }
+    }
+
+    fun onAreaCenterSelected(newCenter: GeoPoint){
+        _uiState.update { state ->
+            state.copy(
+                areaCenter = newCenter,
+                areaRecenterTrigger = state.areaRecenterTrigger + 1
             )
         }
     }

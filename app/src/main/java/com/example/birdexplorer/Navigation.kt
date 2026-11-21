@@ -6,6 +6,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.birdexplorer.ui.ExploreAreaScreen
+import com.example.birdexplorer.ui.MapViewModel
 
 
 enum class Screens { Home, ExploreNearMe, ExploreByArea, SearchSpecies, ExplorationMode, Sightings, PublishSighting, ViewSightings}
@@ -14,6 +16,7 @@ enum class Screens { Home, ExploreNearMe, ExploreByArea, SearchSpecies, Explorat
 fun BirdExplorerApp(modifier: Modifier = Modifier) {
 
     val navController = rememberNavController()
+    val mapViewModel: MapViewModel = viewModel()
 
     NavHost(
         navController = navController,
@@ -42,15 +45,17 @@ fun BirdExplorerApp(modifier: Modifier = Modifier) {
         }
 
         composable(Screens.ExploreNearMe.name) {
-            MapScreen(onBack = {
-                navController.popBackStack()
-            })
+            MapScreen(
+                onBack = { navController.popBackStack()},
+                mapViewModel = mapViewModel
+            )
         }
 
         composable(Screens.ExploreByArea.name) {
-            MapScreen(onBack = {
-                navController.popBackStack()
-            })
+            ExploreAreaScreen(
+                onBack = { navController.popBackStack()},
+                mapViewModel = mapViewModel
+            )
         }
 
         composable(Screens.SearchSpecies.name) {
