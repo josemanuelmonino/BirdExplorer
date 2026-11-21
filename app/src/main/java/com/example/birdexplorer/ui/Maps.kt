@@ -6,6 +6,7 @@ import com.example.birdexplorer.R
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
@@ -51,8 +52,10 @@ fun OsmMap(
     modifier: Modifier = Modifier,
     center: GeoPoint = DEFAULT_CENTER,
     zoom: Double = DEFAULT_ZOOM,
+    recenterTrigger: Int = 0,
     tileSource: ITileSource = TileSourceFactory.MAPNIK,
     markers: List<MapMarkerItem> = emptyList(),
+    userLocation: GeoPoint? = null,
     circleCenter: GeoPoint? = null,
     circleRadiusMeters: Double = 250.0,
     onMapLongPress: ((GeoPoint) -> Unit)? = null
@@ -62,7 +65,7 @@ fun OsmMap(
 
     val mapView = remember {
         MapView(context).apply {
-            setTileSource(TileSourceFactory.MAPNIK)
+            setTileSource(tileSource)
             setMultiTouchControls(true)      //zoom, other screen touching interactions
             controller.setZoom(zoom)
             controller.setCenter(center)
@@ -83,6 +86,14 @@ fun OsmMap(
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             mapView.onDetach()
+        }
+    }
+
+    // re-recenter camera explicitly when requested (clicking "My location")
+    LaunchedEffect(recenterTrigger) {
+        if(recenterTrigger > 0){
+            mapView.controller.setZoom(zoom)
+            mapView.controller.animateTo(center)
         }
     }
 
@@ -126,8 +137,23 @@ fun OsmMap(
 
             // Remove ONLY old markers (and not the overlay, polygons or "My Location" marker
             // whenever something changes. If this wasn't done, they would be duplicated
-            view.overlays.removeAll { it is Marker && it.relatedObject is MapMarkerItem}
+            view.overlays.removeAll {
+                it is Marker && (it.relatedObject is MapMarkerItem || it.relatedObject == "USER_LOCATION")
+            }
 
+            // Draw "My location" marker if GPS location is available
+            if (userLocation != null) {
+                val myLocationMarker = Marker(view).apply {
+                    position = userLocation
+                    title = "My Location"
+                    relatedObject = "USER_LOCATION"
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                    icon = ContextCompat.getDrawable(context, R.drawable.ic_my_location)
+                }
+                view.overlays.add(myLocationMarker)
+            }
+
+            //Draw bird sighting markers
             markers.forEach { item ->
                 val marker = Marker(view).apply {
                     position = GeoPoint(item.latitude, item.longitude)

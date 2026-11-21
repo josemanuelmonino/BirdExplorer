@@ -1,5 +1,12 @@
 package com.example.birdexplorer.ui
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.location.LocationManager
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,13 +25,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import org.osmdroid.tileprovider.tilesource.ITileSource
 import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
@@ -56,6 +66,7 @@ enum class MapStyle(val label: String, val tileSource: ITileSource) {
 
 @Composable
 fun MapScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
     var selectedStyle by rememberSaveable { mutableStateOf(MapStyle.STANDARD) } //standard style by default
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -65,7 +76,64 @@ fun MapScreen(onBack: () -> Unit) {
     val searchCenter = remember(searchLat, searchLon) { GeoPoint(searchLat, searchLon) }
     var radiusMeters by rememberSaveable { mutableFloatStateOf(500f) }
 
-    //TRIAL API MARKERS REPLICATING THE API AND MQTT SAMPLES
+    // User GPS location state
+    var userLat by rememberSaveable { mutableStateOf<Double?>(null) }
+    var userLon by rememberSaveable { mutableStateOf<Double?>(null) }
+    val userLocation = remember(userLat, userLon) {
+        if (userLat != null && userLon != null) GeoPoint(userLat!!, userLon!!) else null
+    }
+    var recenterTrigger by remember { mutableIntStateOf(0) }
+
+    // Helper function reading LocationManager (GPS first (more precise, but will fail in locations
+    // with no signal), NETWORK fallback (less precise, uses nearby WiFi networks and mobile towers,
+    // works in places with no GPS signal))
+    fun fetchDeviceLocation() {
+        val hasFine = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val hasCoarse = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (!hasFine && !hasCoarse) {
+            Toast.makeText(context, "Location permission denied", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+
+        var location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+        if (location == null) {
+            location = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+        }
+
+        if (location != null) {
+            userLat = location.latitude
+            userLon = location.longitude
+            searchLat = location.latitude
+            searchLon = location.longitude
+            recenterTrigger++
+        } else {
+            Toast.makeText(context, "Location not available", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+        val locationPermissionLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestMultiplePermissions()
+        ) { permissions ->
+            val isGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                    permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+
+            if (isGranted) {
+                fetchDeviceLocation()
+            } else {
+                Toast.makeText(context, "Location permission denied", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+    //TRIAL MARKERS REPLICATING THE API AND MQTT SAMPLES
     val sampleMarkers = remember {
         listOf(
             MapMarkerItem(
@@ -105,8 +173,12 @@ fun MapScreen(onBack: () -> Unit) {
 
     Box(modifier = Modifier.fillMaxSize()) {
         OsmMap(
+            center = searchCenter,
+            zoom = DEFAULT_ZOOM,
+            recenterTrigger = recenterTrigger,
             tileSource = selectedStyle.tileSource,
             markers = visibleMarkers,
+            userLocation = userLocation,
             circleCenter = searchCenter,
             circleRadiusMeters = radiusMeters.toDouble(),
             onMapLongPress = { tappedPoint ->
@@ -149,31 +221,63 @@ fun MapScreen(onBack: () -> Unit) {
             }
         }
 
-        // Bottom card to adjust search cicle radius and inspect filtered count
-        Card(
+        // Bottom controls: "My location" button + card to adjust search cicle radius and inspect filtered count
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .padding(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
-            )
+            horizontalAlignment = Alignment.End
         ) {
-            val radiusLabel = if (radiusMeters < 1000f) { //if radius < 1 km, shows it in m
-                "${radiusMeters.roundToInt()} m"
-            } else { //if radius > 1 km, shows it in km
-                String.format(java.util.Locale.US, "%.1f km", radiusMeters / 1000f)
+            Button(
+                onClick = {
+                    val hasFine = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED
+                    val hasCoarse = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED
+
+                    if (hasFine || hasCoarse) {
+                        fetchDeviceLocation()
+                    } else {
+                        locationPermissionLauncher.launch(
+                            arrayOf(
+                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.ACCESS_COARSE_LOCATION
+                            )
+                        )
+                    }
+                },
+                modifier = Modifier.padding(bottom = 8.dp)
+            ) {
+                Text("My location")
             }
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                Text(
-                    text = "Search radius: $radiusLabel (${visibleMarkers.size} sightings)",
-                    style = MaterialTheme.typography.titleSmall
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
                 )
-                Slider(
-                    value = radiusMeters,
-                    onValueChange = { radiusMeters = it },
-                    valueRange = 100f..3000f
-                )
+            ) {
+                val radiusLabel = if (radiusMeters < 1000f) { //if radius < 1 km, shows it in m
+                    "${radiusMeters.roundToInt()} m"
+                } else { //if radius > 1 km, shows it in km
+                    String.format(java.util.Locale.US, "%.1f km", radiusMeters / 1000f)
+                }
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(
+                        text = "Search radius: $radiusLabel (${visibleMarkers.size} sightings)",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Slider(
+                        value = radiusMeters,
+                        onValueChange = { radiusMeters = it },
+                        valueRange = 100f..3000f
+                    )
+                }
             }
         }
     }
