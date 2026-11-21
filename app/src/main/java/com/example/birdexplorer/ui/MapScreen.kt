@@ -22,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableFloatStateOf
@@ -35,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 import org.osmdroid.tileprovider.tilesource.ITileSource
 import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
@@ -65,24 +67,13 @@ enum class MapStyle(val label: String, val tileSource: ITileSource) {
 }
 
 @Composable
-fun MapScreen(onBack: () -> Unit) {
+fun MapScreen(
+    onBack: () -> Unit,
+    mapViewModel: MapViewModel = viewModel()
+) {
     val context = LocalContext.current
-    var selectedStyle by rememberSaveable { mutableStateOf(MapStyle.STANDARD) } //standard style by default
+    val uiState by mapViewModel.uiState.collectAsState()
     var menuExpanded by remember { mutableStateOf(false) }
-
-    // Search circle center and radius (in meters)
-    var searchLat by rememberSaveable { mutableDoubleStateOf(DEFAULT_CENTER.latitude) }
-    var searchLon by rememberSaveable { mutableDoubleStateOf(DEFAULT_CENTER.longitude) }
-    val searchCenter = remember(searchLat, searchLon) { GeoPoint(searchLat, searchLon) }
-    var radiusMeters by rememberSaveable { mutableFloatStateOf(500f) }
-
-    // User GPS location state
-    var userLat by rememberSaveable { mutableStateOf<Double?>(null) }
-    var userLon by rememberSaveable { mutableStateOf<Double?>(null) }
-    val userLocation = remember(userLat, userLon) {
-        if (userLat != null && userLon != null) GeoPoint(userLat!!, userLon!!) else null
-    }
-    var recenterTrigger by remember { mutableIntStateOf(0) }
 
     // Helper function reading LocationManager (GPS first (more precise, but will fail in locations
     // with no signal), NETWORK fallback (less precise, uses nearby WiFi networks and mobile towers,
@@ -110,11 +101,7 @@ fun MapScreen(onBack: () -> Unit) {
         }
 
         if (location != null) {
-            userLat = location.latitude
-            userLon = location.longitude
-            searchLat = location.latitude
-            searchLon = location.longitude
-            recenterTrigger++
+            mapViewModel.onDeviceLocationUpdated(GeoPoint(location.latitude, location.longitude ))
         } else {
             Toast.makeText(context, "Location not available", Toast.LENGTH_SHORT).show()
         }
@@ -133,57 +120,24 @@ fun MapScreen(onBack: () -> Unit) {
             }
         }
 
-    //TRIAL MARKERS REPLICATING THE API AND MQTT SAMPLES
-    val sampleMarkers = remember {
-        listOf(
-            MapMarkerItem(
-                id = "api_101",
-                title = "Gorrión común (Passer domesticus)",
-                subtitle = "Campus Sur UPM, Madrid",
-                latitude = 40.3898,   // ~65 m from center
-                longitude = -3.6282,
-                type = MarkerType.API_OBSERVATION
-            ),
-            MapMarkerItem(
-                id = "mqtt_1",
-                title = "Cotorra argentina",
-                subtitle = "Vistas 3 en los pinos junto a la cafetería",
-                latitude = 40.3905,   // ~180 m from center
-                longitude = -3.6272,
-                type = MarkerType.MQTT_USER_SIGHTING
-            ),
-            MapMarkerItem(
-                id = "api_102",
-                title = "Mirlo común (Turdus merula)",
-                subtitle = "Parque Lineal del Manzanares",
-                latitude = 40.3865,   // ~360 m from center
-                longitude = -3.6310,
-                type = MarkerType.API_OBSERVATION
-            )
-        )
-    }
-
     // Filter only sightings inside the active radius circle
-    val visibleMarkers = remember(sampleMarkers, searchCenter, radiusMeters) {
-        sampleMarkers.filter { marker ->
-            val point = GeoPoint(marker.latitude, marker.longitude)
-            searchCenter.distanceToAsDouble(point) <= radiusMeters
-        }
-    }
+    val visibleMarkers = uiState.visibleLocalMarkers
 
     Box(modifier = Modifier.fillMaxSize()) {
         OsmMap(
-            center = searchCenter,
-            zoom = DEFAULT_ZOOM,
-            recenterTrigger = recenterTrigger,
-            tileSource = selectedStyle.tileSource,
+            center = uiState.searchCenter,
+            zoom = uiState.zoom,
+            recenterTrigger = uiState.recenterTrigger,
+            tileSource = uiState.selectedStyle.tileSource,
             markers = visibleMarkers,
-            userLocation = userLocation,
-            circleCenter = searchCenter,
-            circleRadiusMeters = radiusMeters.toDouble(),
+            userLocation = uiState.userLocation,
+            circleCenter = uiState.searchCenter,
+            circleRadiusMeters = uiState.radiusMeters.toDouble(),
             onMapLongPress = { tappedPoint ->
-                searchLat = tappedPoint.latitude
-                searchLon = tappedPoint.longitude
+                mapViewModel.onSearchCenterChanged(tappedPoint)
+            },
+            onZoomChanged = { newZoom ->
+                mapViewModel.onZoomChanged(newZoom)
             }
         )
 
@@ -202,7 +156,7 @@ fun MapScreen(onBack: () -> Unit) {
                 .padding(16.dp)
         ) {
             FilledTonalButton(onClick = { menuExpanded = true }) {
-                Text("${selectedStyle.label} map")
+                Text("${uiState.selectedStyle.label} map")
             }
 
             DropdownMenu(
@@ -213,7 +167,7 @@ fun MapScreen(onBack: () -> Unit) {
                     DropdownMenuItem(
                         text = { Text(style.label) },
                         onClick = {
-                            selectedStyle = style
+                            mapViewModel.onMapStyleSelected(style)
                             menuExpanded = false
                         }
                     )
@@ -262,19 +216,21 @@ fun MapScreen(onBack: () -> Unit) {
                     containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
                 )
             ) {
-                val radiusLabel = if (radiusMeters < 1000f) { //if radius < 1 km, shows it in m
-                    "${radiusMeters.roundToInt()} m"
+                val radiusLabel = if (uiState.radiusMeters < 1000f) { //if radius < 1 km, shows it in m
+                    "${uiState.radiusMeters.roundToInt()} m"
                 } else { //if radius > 1 km, shows it in km
-                    String.format(java.util.Locale.US, "%.1f km", radiusMeters / 1000f)
+                    String.format(java.util.Locale.US, "%.1f km", uiState.radiusMeters / 1000f)
                 }
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    val count = visibleMarkers.size
+                    val sightingWord = if (count == 1) "sighting" else "sightings"
                     Text(
-                        text = "Search radius: $radiusLabel (${visibleMarkers.size} sightings)",
+                        text = "Search radius: $radiusLabel ($count $sightingWord)",
                         style = MaterialTheme.typography.titleSmall
                     )
                     Slider(
-                        value = radiusMeters,
-                        onValueChange = { radiusMeters = it },
+                        value = uiState.radiusMeters,
+                        onValueChange = { mapViewModel.onRadiusChanged(it) },
                         valueRange = 100f..3000f
                     )
                 }

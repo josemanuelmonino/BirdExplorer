@@ -41,6 +41,7 @@ mqtt-client-transport-tcp = { module = "org.meshtastic:mqtt-client-transport-tcp
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 osmdroid-android = { group = "org.osmdroid", name = "osmdroid-android", version.ref = "osmdroid" }
+androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycleRuntimeKtx" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

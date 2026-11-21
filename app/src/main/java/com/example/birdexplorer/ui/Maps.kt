@@ -18,6 +18,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import org.osmdroid.events.MapEventsReceiver
+import org.osmdroid.events.ScrollEvent
+import org.osmdroid.events.ZoomEvent
+import org.osmdroid.events.MapListener
 import org.osmdroid.tileprovider.tilesource.ITileSource
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -57,11 +60,13 @@ fun OsmMap(
     markers: List<MapMarkerItem> = emptyList(),
     userLocation: GeoPoint? = null,
     circleCenter: GeoPoint? = null,
-    circleRadiusMeters: Double = 250.0,
-    onMapLongPress: ((GeoPoint) -> Unit)? = null
+    circleRadiusMeters: Double = 500.0,
+    onMapLongPress: ((GeoPoint) -> Unit)? = null,
+    onZoomChanged: ((Double) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val currentOnLongPress by rememberUpdatedState(onMapLongPress)
+    val currentOnZoomChanged by rememberUpdatedState(onZoomChanged)
 
     val mapView = remember {
         MapView(context).apply {
@@ -69,6 +74,15 @@ fun OsmMap(
             setMultiTouchControls(true)      //zoom, other screen touching interactions
             controller.setZoom(zoom)
             controller.setCenter(center)
+
+            addMapListener(object : MapListener {
+                override fun onScroll(event: ScrollEvent?): Boolean = false
+
+                override fun onZoom(event: ZoomEvent?): Boolean {
+                    event?.zoomLevel?.let { currentOnZoomChanged?.invoke(it)}
+                    return false
+                }
+            })
         }
     }
 
