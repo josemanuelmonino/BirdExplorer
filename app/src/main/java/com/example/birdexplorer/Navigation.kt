@@ -90,8 +90,13 @@ fun BirdExplorerApp(modifier: Modifier = Modifier, mqttViewModel: MqttViewModel)
         composable(Screens.PublishSighting.name) {
             PublishSightingScreen(
                 onBack = { navController.popBackStack() },
-                onPublish = { species, location, notes ->
-                    mqttViewModel.publishSighting(species, location, notes)
+                onPublish = { species, location, notes, onResult ->
+                    mqttViewModel.publishSighting(
+                        species = species,
+                        location = location,
+                        notes = notes,
+                        onResult = onResult
+                    )
                 }
             )
         }

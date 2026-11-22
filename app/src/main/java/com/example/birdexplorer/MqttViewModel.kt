@@ -51,7 +51,13 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun publishSighting(species: String, location: String, notes: String) {
+
+    fun publishSighting(
+        species: String,
+        location: String,
+        notes: String,
+        onResult: (Boolean) -> Unit
+    ) {
         viewModelScope.launch {
             try {
                 val sighting = JSONObject().apply {
@@ -68,12 +74,15 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 )
 
                 Log.d("BirdExplorerMQTT", "Sighting published: $sighting")
+                onResult(true)
 
             } catch (e: Exception) {
                 Log.e("BirdExplorerMQTT", "Error publishing sighting", e)
+                onResult(false)
             }
         }
     }
+
 
     fun observeMessages() = client.messagesMatching(SUB_TOPIC)
 
