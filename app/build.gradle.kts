@@ -65,5 +65,6 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
+    implementation("androidx.compose.material:material-icons-core:1.7.8")
 
 }

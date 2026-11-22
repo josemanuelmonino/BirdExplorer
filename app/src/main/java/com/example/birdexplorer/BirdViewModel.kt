@@ -48,27 +48,24 @@ class BirdViewModel(
         load { repository.bySpecies(taxonId) }
 
     fun searchSpecies(query: String) {
-        searchJob?.cancel()                       // cancels the before search
-        if (query.length < 3) {
-            // throws out useless searches, for instance "g" "go" (probably incomplete searches by the
-            // user) that will only fill the API search quota and don't satisfie the user
+        val q = query.trim()
+        searchJob?.cancel()
+        if (q.length < 2) {
             _uiState.update { it.copy(speciesResults = emptyList()) }
             return
         }
-        searchJob = viewModelScope.launch { // we use a corroutine from viewModel to
-                                            // delete itself if the viewModel is destroyed
-            delay(800)                            // waits for the user to stop writing
+        searchJob = viewModelScope.launch {
             try {
-                val result = repository.searchSpecies(query)
+                val result = repository.searchSpecies(q)
                 _uiState.update { it.copy(speciesResults = result) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "searchSpecies failed", e)
-                _uiState.update { it.copy(error = errorMessage(e)) }            }
+                _uiState.update { it.copy(error = errorMessage(e)) }
+            }
         }
     }
-
     fun clearError() = _uiState.update { it.copy(error = null) } // deletes errors from de uiState
 
     // --- common logic  ---
