@@ -16,10 +16,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.collect
+import java.util.UUID
+import org.meshtastic.mqtt.PublishProperties
 
 private const val BROKER = "tcp://192.168.1.83:1883" // IP de ejemplo
 private const val PUB_TOPIC = "birdexplorer/sightings"
-private const val SUB_TOPIC = "birdexplorer/sightings"
+private const val SUB_TOPIC = "birdexplorer/sightings/#"
 
 class MqttViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -67,12 +69,20 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                     put("timestamp", System.currentTimeMillis())
                 }
 
-                client.publish(
-                    PUB_TOPIC,
-                    sighting.toString(),
-                    QoS.AT_LEAST_ONCE
-                )
+                val topic = "$PUB_TOPIC/${UUID.randomUUID()}"
 
+                client.publish(
+                    topic = topic,
+                    payload = sighting.toString(),
+                    qos = QoS.AT_LEAST_ONCE,
+                    retain = true,
+                    properties = PublishProperties(
+                        messageExpiryInterval = 1296000L //15 dias
+                                // messageExpiryInterval = 604800L // 7 dias
+                                // messageExpiryInterval = 60L //60s (pruebas)
+                    )
+                )
+                val properties = PublishProperties()
                 Log.d("BirdExplorerMQTT", "Sighting published: $sighting")
                 onResult(true)
 
