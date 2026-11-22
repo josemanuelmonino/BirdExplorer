@@ -98,6 +98,7 @@ fun HomeScreen(
 
         HomeOption(
             title = "Search for a species",
+            description = "Check if a bird has been seen in Spain.",
             onClick = onSearchSpecies
         )
 

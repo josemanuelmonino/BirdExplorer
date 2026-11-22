@@ -11,6 +11,7 @@ data class BirdSighting(
     val commonName: String,
     val scientificName: String,
     val place: String?,
+    val observedOn: String?,     // date of the sighting, e.g. "2026-11-02"
     val lat: Double,
     val lon: Double,
     val photoUrl: String?,
@@ -28,9 +29,9 @@ class BirdRepository(private val api: INatApiService = NetworkDataSource.service
         api.getObservations(neLat = neLat, neLng = neLng, swLat = swLat, swLng = swLng).toSightings()
 
     suspend fun bySpecies(taxonId: Int) =
-        api.getObservations(taxonId = taxonId).toSightings()
+        api.getObservations(taxonId = taxonId, placeId = SPAIN_PLACE_ID).toSightings()
 
-    suspend fun searchSpecies(query: String) = api.searchTaxa(query).results
+    suspend fun searchSpecies(query: String) = api.searchTaxa(query, placeId = SPAIN_PLACE_ID).results
 
     private fun ObservationsResponse.toSightings(): List<BirdSighting> {
         Log.d(TAG, "API -> total_results=$total_results, results=${results.size}")
@@ -45,6 +46,7 @@ class BirdRepository(private val api: INatApiService = NetworkDataSource.service
                 commonName = o.taxon?.preferred_common_name ?: o.taxon?.name ?: "Desconocida",
                 scientificName = o.taxon?.name ?: "",
                 place = o.place_guess,
+                observedOn = o.observed_on,
                 lat = c[1], lon = c[0],                            // [lon, lat]
                 photoUrl = (photo?.medium_url ?: photo?.url)?.replace("square", "medium"),
                 attribution = photo?.attribution

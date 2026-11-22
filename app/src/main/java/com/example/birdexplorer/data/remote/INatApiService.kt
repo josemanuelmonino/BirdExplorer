@@ -5,6 +5,7 @@ import retrofit2.http.Query
 
 const val BASE_URL = "https://api.inaturalist.org/"
 const val BIRDS_TAXON_ID = 3
+const val SPAIN_PLACE_ID = 6753   // iNaturalist place id for Spain, used to limit the results to the country
 
 // main interface
 interface INatApiService {
@@ -17,6 +18,7 @@ interface INatApiService {
         @Query("lat") lat: Double? = null,
         @Query("lng") lng: Double? = null,
         @Query("radius") radiusKm: Int? = null,         // define a radius (useful in near me function)
+        @Query("place_id") placeId: Int? = null,        // limits the results to a place, for instance Spain
         // bounding box with two opposite corners
         @Query("nelat") neLat: Double? = null,
         @Query("nelng") neLng: Double? = null,
@@ -43,6 +45,7 @@ interface INatApiService {
         @Query("q") query: String,
         @Query("taxon_id") taxonId: Int = BIRDS_TAXON_ID, // number 3 is to filter only birds
         @Query("rank") rank: String = "species",
+        @Query("place_id") placeId: Int? = null,   // only species that live in this place
         @Query("locale") locale: String = "es", // only in spain
         @Query("per_page") perPage: Int = 20    // limit to 20 in spain
     ): TaxonResponse

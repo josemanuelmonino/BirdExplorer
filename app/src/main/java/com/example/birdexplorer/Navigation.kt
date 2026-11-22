@@ -43,23 +43,20 @@ fun BirdExplorerApp(modifier: Modifier = Modifier) {
         composable(Screens.ExploreNearMe.name) {
             val birdViewModel: BirdViewModel = viewModel()
             ExploreNearMeScreen(
-                viewModel = birdViewModel,
-                onBack = { navController.popBackStack() }
+                viewModel = birdViewModel
             )
         }
 
         composable(Screens.SearchSpecies.name) {
             val birdViewModel: BirdViewModel = viewModel()
             SearchSpeciesScreen(
-                viewModel = birdViewModel,
-                onBack = { navController.popBackStack() }
+                viewModel = birdViewModel
             )
         }
         composable(Screens.ExploreByArea.name) {
             val birdViewModel: BirdViewModel = viewModel()
             ExploreByAreaScreen(
-                viewModel = birdViewModel,
-                onBack = { navController.popBackStack() }
+                viewModel = birdViewModel
             )
         }
 
