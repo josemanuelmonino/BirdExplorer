@@ -1,4 +1,6 @@
+
 package com.example.birdexplorer
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -8,12 +10,22 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 
-
-enum class Screens { Home, ExploreNearMe, ExploreByArea, SearchSpecies, ExplorationMode, Sightings, PublishSighting, ViewSightings}
+enum class Screens {
+    Home,
+    ExploreNearMe,
+    ExploreByArea,
+    SearchSpecies,
+    ExplorationMode,
+    Sightings,
+    PublishSighting,
+    ViewSightings
+}
 
 @Composable
-fun BirdExplorerApp(modifier: Modifier = Modifier, mqttViewModel: MqttViewModel) {
-
+fun BirdExplorerApp(
+    modifier: Modifier = Modifier,
+    mqttViewModel: MqttViewModel
+) {
     val navController = rememberNavController()
     val mqttUiState by mqttViewModel.uiState.collectAsState()
 
@@ -45,30 +57,33 @@ fun BirdExplorerApp(modifier: Modifier = Modifier, mqttViewModel: MqttViewModel)
 
         composable(Screens.ExploreNearMe.name) {
             val birdViewModel: BirdViewModel = viewModel()
+
             ExploreNearMeScreen(
+                viewModel = birdViewModel
+            )
+        }
+
+        composable(Screens.ExploreByArea.name) {
+            val birdViewModel: BirdViewModel = viewModel()
+
+            ExploreByAreaScreen(
                 viewModel = birdViewModel
             )
         }
 
         composable(Screens.SearchSpecies.name) {
             val birdViewModel: BirdViewModel = viewModel()
+
             SearchSpeciesScreen(
-                viewModel = birdViewModel
-            )
-        }
-        composable(Screens.ExploreByArea.name) {
-            val birdViewModel: BirdViewModel = viewModel()
-            ExploreByAreaScreen(
                 viewModel = birdViewModel
             )
         }
 
         composable(Screens.ExplorationMode.name) {
-
-            val viewModel: ExplorationViewModel = viewModel()
+            val explorationViewModel: ExplorationViewModel = viewModel()
 
             ExplorationModeScreen(
-                viewModel = viewModel,
+                viewModel = explorationViewModel,
                 onBack = {
                     navController.popBackStack()
                 },
@@ -91,7 +106,9 @@ fun BirdExplorerApp(modifier: Modifier = Modifier, mqttViewModel: MqttViewModel)
 
         composable(Screens.PublishSighting.name) {
             PublishSightingScreen(
-                onBack = { navController.popBackStack() },
+                onBack = {
+                    navController.popBackStack()
+                },
                 onPublish = { species, location, notes, onResult ->
                     mqttViewModel.publishSighting(
                         species = species,
@@ -105,7 +122,9 @@ fun BirdExplorerApp(modifier: Modifier = Modifier, mqttViewModel: MqttViewModel)
 
         composable(Screens.ViewSightings.name) {
             ViewSightingsScreen(
-                onBack = { navController.popBackStack() },
+                onBack = {
+                    navController.popBackStack()
+                },
                 sightings = mqttUiState.sightings
             )
         }
