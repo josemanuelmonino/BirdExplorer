@@ -44,21 +44,23 @@ fun BirdExplorerApp(modifier: Modifier = Modifier, mqttViewModel: MqttViewModel)
         }
 
         composable(Screens.ExploreNearMe.name) {
-            PlaceholderScreen("Explore Near Me") {
-                navController.popBackStack()
-            }
-        }
-
-        composable(Screens.ExploreByArea.name) {
-            PlaceholderScreen("Explore by Area") {
-                navController.popBackStack()
-            }
+            val birdViewModel: BirdViewModel = viewModel()
+            ExploreNearMeScreen(
+                viewModel = birdViewModel
+            )
         }
 
         composable(Screens.SearchSpecies.name) {
-            PlaceholderScreen("Search for a Species") {
-                navController.popBackStack()
-            }
+            val birdViewModel: BirdViewModel = viewModel()
+            SearchSpeciesScreen(
+                viewModel = birdViewModel
+            )
+        }
+        composable(Screens.ExploreByArea.name) {
+            val birdViewModel: BirdViewModel = viewModel()
+            ExploreByAreaScreen(
+                viewModel = birdViewModel
+            )
         }
 
         composable(Screens.ExplorationMode.name) {
