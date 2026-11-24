@@ -36,6 +36,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.location.LocationManagerCompat
@@ -370,6 +371,71 @@ private fun ViewToggleButton(
     else OutlinedButton(onClick = onClick, modifier = modifier) { Text(text) }
 }
 
+// Bottom panel of the map: one card per sighting, like the list of Google Maps
+@Composable
+private fun SightingsCarousel(
+    sightings: List<BirdSighting>,
+    onSightingClick: (BirdSighting) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        tonalElevation = 3.dp
+    ) {
+        Column(Modifier.padding(vertical = 10.dp)) {
+            val word = if (sightings.size == 1) "sighting" else "sightings"
+            Text(
+                text = "${sightings.size} $word",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(sightings) { s ->
+                    Card(modifier = Modifier.width(260.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .clickable { onSightingClick(s) }
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AsyncImage(
+                                model = s.photoUrl,
+                                contentDescription = s.commonName,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.size(64.dp).clip(RoundedCornerShape(8.dp))
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    s.commonName,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    s.place ?: "Unknown place",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    s.observedOn ?: "",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun ExploreByAreaScreen(
     viewModel: BirdViewModel,
@@ -439,7 +505,22 @@ fun ExploreByAreaScreen(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
             ) {
-                ExploreAreaScreen(mapViewModel = mapViewModel)
+                ExploreAreaScreen(
+                    mapViewModel = mapViewModel,
+                    showSearchBar = false,
+                    onMarkerClick =  { item ->
+                        uiState.sightings
+                            .firstOrNull { "api_${it.id}" == item.id }
+                            ?.let(viewModel::selectSighting)
+                    }
+                )
+                if (uiState.sightings.isNotEmpty()) {
+                    SightingsCarousel(
+                        sightings = uiState.sightings,
+                        onSightingClick = viewModel::selectSighting,
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                    )
+                }
                 if (uiState.isLoading) {
                     CircularProgressIndicator(Modifier.align(Alignment.Center))
                 }

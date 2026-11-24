@@ -73,6 +73,8 @@ private fun isSpecificMatchInSpain(address: android.location.Address): Boolean {
 @Composable
 fun ExploreAreaScreen(
     onBack: (() -> Unit)? = null,
+    showSearchBar: Boolean = true,
+    onMarkerClick: ((MapMarkerItem) -> Unit)? = null,
     mapViewModel: MapViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -161,7 +163,8 @@ fun ExploreAreaScreen(
             tileSource = uiState.selectedStyle.tileSource,
             markers = allMarkers,
             userLocation = uiState.userLocation,
-            circleCenter = null // No radius circle in Explore by Area mode
+            circleCenter = null, // No radius circle in Explore by Area mode
+            onMarkerClick = onMarkerClick
         )
 
         // Top controls: Back (only if a callback is given) + Map style selector
@@ -201,44 +204,46 @@ fun ExploreAreaScreen(
             }
         }
 
-        // Bottom card: Area search bar + regional sightings summary
-        Card(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .imePadding()
-                .padding(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
-            )
-        ) {
-            val count = allMarkers.size
-            val sightingWord = if (count == 1) "sighting" else "sightings"
-
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                Text(
-                    text = "Explore by Area ($count regional $sightingWord)",
-                    style = MaterialTheme.typography.titleSmall
+        if (showSearchBar) {
+            // Bottom card: Area search bar + regional sightings summary
+            Card(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .imePadding()
+                    .padding(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
                 )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        placeholder = { Text("City, park, or region...") },
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { searchAreaByName() })
+        ) {
+                val count = allMarkers.size
+                val sightingWord = if (count == 1) "sighting" else "sightings"
+
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(
+                        text = "Explore by Area ($count regional $sightingWord)",
+                        style = MaterialTheme.typography.titleSmall
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(onClick = { searchAreaByName() }) {
-                        Text("Go")
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            placeholder = { Text("City, park, or region...") },
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = { searchAreaByName() })
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(onClick = { searchAreaByName() }) {
+                            Text("Go")
+                        }
                     }
                 }
             }

@@ -67,11 +67,13 @@ fun OsmMap(
     circleCenter: GeoPoint? = null,
     circleRadiusMeters: Double = 500.0,
     onMapLongPress: ((GeoPoint) -> Unit)? = null,
-    onZoomChanged: ((Double) -> Unit)? = null
+    onZoomChanged: ((Double) -> Unit)? = null,
+    onMarkerClick: ((MapMarkerItem) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val currentOnLongPress by rememberUpdatedState(onMapLongPress)
     val currentOnZoomChanged by rememberUpdatedState(onZoomChanged)
+    val currentOnMarkerClick by rememberUpdatedState(onMarkerClick)
 
     val mapView = remember {
         MapView(context).apply {
@@ -187,6 +189,15 @@ fun OsmMap(
                         MarkerType.MQTT_USER_SIGHTING -> "[MQTT] ${item.subtitle}" //timestamp/notes (MQTT)
                     }
                     relatedObject = item
+                    setOnMarkerClickListener { _, _->
+                        val handler = currentOnMarkerClick
+                        if (handler != null) {
+                            handler(item)
+                            true //if handled, no info bubble
+                        } else {
+                            false //default behavior is info bubble
+                        }
+                    }
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
 
                     // diff marker icon depending on if originated from API or MQTT
