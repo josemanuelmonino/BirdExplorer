@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.core.view.doOnLayout
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -28,10 +29,14 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polygon
+import org.osmdroid.util.BoundingBox
 import java.util.Locale
 
 // By default, centered around UPM Campus Sur
 val DEFAULT_CENTER = GeoPoint(40.3893, -3.6286)
+
+// Spain bounds including Canary and Balearic Islands (north, east, south, west)
+val SPAIN_BOUNDS = BoundingBox(43.8, 4.4, 27.6, -18.2)
 const val DEFAULT_ZOOM = 16.0
 
 // Both MarkerType and MapMarkerItem are defined in this file because any screen that calls
@@ -72,8 +77,11 @@ fun OsmMap(
         MapView(context).apply {
             setTileSource(tileSource)
             setMultiTouchControls(true)      //zoom, other screen touching interactions
-            controller.setZoom(zoom)
-            controller.setCenter(center)
+            setScrollableAreaLimitDouble(SPAIN_BOUNDS)
+            doOnLayout {
+                controller.setZoom(zoom)
+                controller.setCenter(center)
+            }
 
             addMapListener(object : MapListener {
                 override fun onScroll(event: ScrollEvent?): Boolean = false
@@ -106,8 +114,10 @@ fun OsmMap(
     // re-recenter camera explicitly when requested (clicking "My location")
     LaunchedEffect(recenterTrigger) {
         if(recenterTrigger > 0){
-            mapView.controller.setZoom(zoom)
-            mapView.controller.animateTo(center)
+            mapView.doOnLayout {
+                mapView.controller.setZoom(zoom)
+                mapView.controller.animateTo(center)
+            }
         }
     }
 

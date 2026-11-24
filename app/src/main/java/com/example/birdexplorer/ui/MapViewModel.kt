@@ -14,6 +14,7 @@ data class MapUiState(
     val userLocation: GeoPoint? = null,
     val recenterTrigger: Int = 0,
     val areaCenter: GeoPoint = DEFAULT_CENTER,
+    val areaZoom: Double = 12.0,
     val areaRecenterTrigger: Int = 0,
     val apiMarkers: List<MapMarkerItem> = emptyList(),
     val mqttMarkers: List<MapMarkerItem> = emptyList()
@@ -32,12 +33,7 @@ data class MapUiState(
 
 class MapViewModel : ViewModel() {
 
-    private val _uiState = MutableStateFlow(
-        MapUiState(
-            apiMarkers = sampleApiMarkers(),
-            mqttMarkers = sampleMqttMarkers()
-        )
-    )
+    private val _uiState = MutableStateFlow(MapUiState())
     val uiState: StateFlow<MapUiState> = _uiState.asStateFlow()
 
     fun onMapStyleSelected(style: MapStyle) {
@@ -71,10 +67,11 @@ class MapViewModel : ViewModel() {
         }
     }
 
-    fun onAreaCenterSelected(newCenter: GeoPoint){
+    fun onAreaCenterSelected(newCenter: GeoPoint, zoom: Double? = null){
         _uiState.update { state ->
             state.copy(
                 areaCenter = newCenter,
+                areaZoom = zoom ?: state.areaZoom,
                 areaRecenterTrigger = state.areaRecenterTrigger + 1
             )
         }

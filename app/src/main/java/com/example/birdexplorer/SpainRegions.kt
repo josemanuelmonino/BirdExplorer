@@ -4,7 +4,7 @@ package com.example.birdexplorer
 data class SpainRegion(
     val name: String,
     val neLat: Double, val neLng: Double,
-    val swLat: Double, val swLng: Double
+    val swLat: Double, val swLng: Double,
 )
 
 val spainRegions = listOf(

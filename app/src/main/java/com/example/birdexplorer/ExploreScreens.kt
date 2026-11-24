@@ -42,6 +42,12 @@ import androidx.core.location.LocationManagerCompat
 import coil3.compose.AsyncImage
 import com.example.birdexplorer.data.BirdSighting
 import com.example.birdexplorer.data.remote.Taxon
+import com.example.birdexplorer.ui.ExploreAreaScreen
+import com.example.birdexplorer.ui.MapMarkerItem
+import com.example.birdexplorer.ui.MapViewModel
+import com.example.birdexplorer.ui.MarkerType
+import org.osmdroid.util.GeoPoint
+import kotlin.math.ln
 
 // Obtains actual GPS location if there is no error
 private fun fetchLocation(context: Context, onLocation: (Location) -> Unit, onFail: () -> Unit) {
@@ -336,19 +342,75 @@ fun ExploreNearMeScreen(
 }
 
 // ---------- Explore by area ----------
+
+// BirdSighting (iNaturalist) -> marker for the map
+private fun BirdSighting.toMarkerItem() = MapMarkerItem(
+    id = "api_$id",
+    title = commonName,
+    subtitle = place ?: observedOn ?: scientificName,
+    latitude = lat,
+    longitude = lon,
+    type = MarkerType.API_OBSERVATION
+)
+
+// Zoom that fits the whole region on screen (bigger region -> lower zoom)
+private fun zoomFor(region: SpainRegion): Double {
+    val span = maxOf(region.neLat - region.swLat, region.neLng - region.swLng)
+    return (ln(1400.0 / span) / ln(2.0)).toInt().coerceIn(5, 10).toDouble()
+}
+
+@Composable
+private fun ViewToggleButton(
+    text: String,
+    active: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (active) Button(onClick = onClick, modifier = modifier) { Text(text) }
+    else OutlinedButton(onClick = onClick, modifier = modifier) { Text(text) }
+}
+
 @Composable
 fun ExploreByAreaScreen(
     viewModel: BirdViewModel,
+    mapViewModel: MapViewModel,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
     ScreenEffects(uiState, viewModel)
 
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
+    var showMap by rememberSaveable { mutableStateOf(false) } //list is the one active by default
 
-    Column(modifier = modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 20.dp)) {
+    //The map always draws the same sightings as the list
+    LaunchedEffect(uiState.sightings) {
+        mapViewModel.setApiObservations(uiState.sightings.map { it.toMarkerItem()})
+    }
+
+    Column(modifier = modifier
+        .fillMaxSize()
+        .padding(horizontal = 16.dp, vertical = 20.dp)
+    ) {
         ScreenTitle("Explore by area")
 
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ViewToggleButton(
+                "List",
+                active = !showMap,
+                onClick = { showMap = false },
+                modifier = Modifier.weight(1f)
+            )
+            ViewToggleButton(
+                "Map",
+                active = showMap,
+                onClick = { showMap = true },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        //Region filter: loads the sightings and moves the map to that region
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(spainRegions) { region ->
                 FilterChip(
@@ -356,6 +418,13 @@ fun ExploreByAreaScreen(
                     onClick = {
                         selected = region.name
                         viewModel.loadByArea(region.neLat, region.neLng, region.swLat, region.swLng)
+                        mapViewModel.onAreaCenterSelected(
+                            GeoPoint(
+                                (region.neLat + region.swLat) / 2,
+                                (region.neLng + region.swLng) / 2
+                            ),
+                            zoomFor(region)
+                        )
                     },
                     label = { Text(region.name) }
                 )
@@ -363,13 +432,27 @@ fun ExploreByAreaScreen(
         }
 
         Spacer(Modifier.height(12.dp))
-        SightingsList(
-            uiState = uiState,
-            emptyText = if (selected == null) "Pick a region to see its bird sightings"
-                        else "No sightings to show",
-            onSightingClick = viewModel::selectSighting,
-            modifier = Modifier.weight(1f).fillMaxWidth()
-        )
+
+        if (showMap) {
+            Box(Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+            ) {
+                ExploreAreaScreen(mapViewModel = mapViewModel)
+                if (uiState.isLoading) {
+                    CircularProgressIndicator(Modifier.align(Alignment.Center))
+                }
+            }
+        } else {
+            SightingsList(
+                uiState = uiState,
+                emptyText = if (selected == null) "Pick a region to see its bird sightings"
+                            else "No sightings to show",
+                onSightingClick = viewModel::selectSighting,
+                modifier = Modifier.weight(1f).fillMaxWidth()
+            )
+        }
     }
 }
 

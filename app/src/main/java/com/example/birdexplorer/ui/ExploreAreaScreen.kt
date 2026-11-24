@@ -27,7 +27,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -46,9 +45,8 @@ import kotlinx.coroutines.withContext
 import org.osmdroid.util.GeoPoint
 import java.util.Locale
 
-private const val AREA_INITIAL_ZOOM = 12.0
 private const val AREA_SEARCHED_ZOOM = 15.0 //when in Search by Area mode, results are shown with a
-                                            //higher zoom
+//higher zoom
 
 // Geographic bounding box covering Spain (including Canary and Balearic Islands) to avoid map search
 // leading to other countries (only info regarding bird sightings in Spain is available)
@@ -71,9 +69,10 @@ private fun isSpecificMatchInSpain(address: android.location.Address): Boolean {
                     feature.isNotEmpty()
             )
 }
+
 @Composable
 fun ExploreAreaScreen(
-    onBack: () -> Unit,
+    onBack: (() -> Unit)? = null,
     mapViewModel: MapViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -81,7 +80,6 @@ fun ExploreAreaScreen(
     val scope = rememberCoroutineScope()
     val uiState by mapViewModel.uiState.collectAsState()
 
-    var areaZoom by rememberSaveable { mutableDoubleStateOf(AREA_INITIAL_ZOOM) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -114,8 +112,10 @@ fun ExploreAreaScreen(
             ) { addresses ->
                 val first = addresses.firstOrNull()?.takeIf { isSpecificMatchInSpain(it) }
                 if (first != null) {
-                    areaZoom = AREA_SEARCHED_ZOOM
-                    mapViewModel.onAreaCenterSelected(GeoPoint(first.latitude, first.longitude))
+                    mapViewModel.onAreaCenterSelected(
+                        GeoPoint(first.latitude, first.longitude),
+                        AREA_SEARCHED_ZOOM
+                    )
                 } else {
                     scope.launch(Dispatchers.Main) {
                         Toast.makeText(context, "Area not found in Spain: $query", Toast.LENGTH_SHORT).show()
@@ -140,8 +140,10 @@ fun ExploreAreaScreen(
                 }
                 val validResult = result?.takeIf { isSpecificMatchInSpain(it) }
                 if (validResult != null) {
-                    areaZoom = AREA_SEARCHED_ZOOM
-                    mapViewModel.onAreaCenterSelected(GeoPoint(result.latitude, result.longitude))
+                    mapViewModel.onAreaCenterSelected(
+                        GeoPoint(validResult.latitude, validResult.longitude),
+                        AREA_SEARCHED_ZOOM
+                    )
                 } else {
                     Toast.makeText(context, "Area not found in Spain: $query", Toast.LENGTH_SHORT).show()
                 }
@@ -154,7 +156,7 @@ fun ExploreAreaScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         OsmMap(
             center = uiState.areaCenter,
-            zoom = areaZoom,
+            zoom = uiState.areaZoom,
             recenterTrigger = uiState.areaRecenterTrigger,
             tileSource = uiState.selectedStyle.tileSource,
             markers = allMarkers,
@@ -162,14 +164,16 @@ fun ExploreAreaScreen(
             circleCenter = null // No radius circle in Explore by Area mode
         )
 
-        // Top controls: Back + Map style selector
-        Button(
-            onClick = onBack,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(16.dp)
-        ) {
-            Text("Back")
+        // Top controls: Back (only if a callback is given) + Map style selector
+        if (onBack != null) {
+            Button(
+                onClick = onBack,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(16.dp)
+            ) {
+                Text("Back")
+            }
         }
 
         Box(

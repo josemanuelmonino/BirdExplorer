@@ -9,6 +9,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.birdexplorer.ui.MapViewModel
 
 enum class Screens {
     Home,
@@ -65,9 +66,11 @@ fun BirdExplorerApp(
 
         composable(Screens.ExploreByArea.name) {
             val birdViewModel: BirdViewModel = viewModel()
+            val mapViewModel: MapViewModel = viewModel()
 
             ExploreByAreaScreen(
-                viewModel = birdViewModel
+                viewModel = birdViewModel,
+                mapViewModel = mapViewModel
             )
         }
 
