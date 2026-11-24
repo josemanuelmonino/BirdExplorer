@@ -1,5 +1,7 @@
 package com.example.birdexplorer
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -10,9 +12,10 @@ import androidx.navigation.compose.rememberNavController
 enum class Screens { Home, ExploreNearMe, ExploreByArea, SearchSpecies, ExplorationMode, Sightings, PublishSighting, ViewSightings}
 
 @Composable
-fun BirdExplorerApp(modifier: Modifier = Modifier) {
+fun BirdExplorerApp(modifier: Modifier = Modifier, mqttViewModel: MqttViewModel) {
 
     val navController = rememberNavController()
+    val mqttUiState by mqttViewModel.uiState.collectAsState()
 
     NavHost(
         navController = navController,
@@ -86,13 +89,22 @@ fun BirdExplorerApp(modifier: Modifier = Modifier) {
 
         composable(Screens.PublishSighting.name) {
             PublishSightingScreen(
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onPublish = { species, location, notes, onResult ->
+                    mqttViewModel.publishSighting(
+                        species = species,
+                        location = location,
+                        notes = notes,
+                        onResult = onResult
+                    )
+                }
             )
         }
 
         composable(Screens.ViewSightings.name) {
             ViewSightingsScreen(
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                sightings = mqttUiState.sightings
             )
         }
     }
