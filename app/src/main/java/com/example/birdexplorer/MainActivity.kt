@@ -15,6 +15,7 @@ import org.osmdroid.config.Configuration
 class MainActivity : ComponentActivity() {
 
     private val mqttViewModel: MqttViewModel by viewModels()
+    private val explorationViewModel: ExplorationViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -28,6 +29,7 @@ class MainActivity : ComponentActivity() {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     BirdExplorerApp(
                         mqttViewModel = mqttViewModel,
+                        explorationViewModel = explorationViewModel,
                         modifier = Modifier.padding(innerPadding)
                     )
                 }

@@ -61,6 +61,7 @@ import kotlinx.coroutines.withContext
 import java.util.Locale
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
+import androidx.compose.material3.Switch
 
 
 @Composable
@@ -69,12 +70,15 @@ fun HomeScreen(
     onExploreByArea: () -> Unit,
     onSearchSpecies: () -> Unit,
     onExplorationMode: () -> Unit,
-    onPublishSighting: () -> Unit
+    onPublishSighting: () -> Unit,
+    colorFilterEnabled: Boolean,
+    onColorFilterChange: (Boolean) -> Unit
 ) {
     val isPortrait = (
             LocalConfiguration.current.orientation ==
                     Configuration.ORIENTATION_PORTRAIT
             )
+
 
     if (isPortrait) {
         // Diseño vertical (portrait)
@@ -99,11 +103,34 @@ fun HomeScreen(
                     .clip(RoundedCornerShape(12.dp))
             )
 
-            Text(
-                text = "Discover the birds around you",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+
+
+            Column {
+                Text(
+                    text = "Discover the birds around you",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Text(
+                        text = "Colorblind Mode",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+
+                    Switch(
+                        checked = colorFilterEnabled,
+                        onCheckedChange = onColorFilterChange
+                    )
+                }
+            }
+
+
 
             Text(
                 text = "Explore bird observations in Spain.",
@@ -171,11 +198,34 @@ fun HomeScreen(
                         .clip(RoundedCornerShape(10.dp))
                 )
 
-                Text(
-                    text = "Discover the birds around you",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold
-                )
+
+
+                Column {
+                    Text(
+                        text = "Discover the birds around you",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        Text(
+                            text = "Colorblind Mode",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+
+                        Switch(
+                            checked = colorFilterEnabled,
+                            onCheckedChange = onColorFilterChange
+                        )
+                    }
+                }
+
+
 
                 Text(
                     text = "Explore bird observations in Spain.",
@@ -784,29 +834,39 @@ fun PublishSightingScreen(
 
 
     // Acción compartida por los botones Publish de ambas orientaciones
-    val publishAction: () -> Unit = {
-        onPublish(species, location, notes, lat, lon) { success ->
-            if (success) {
-                Toast.makeText(
-                    context,
-                    "Sighting published!",
-                    Toast.LENGTH_SHORT
-                ).show()
 
-                species = ""
-                location = ""
-                notes = ""
-                lat = null
-                lon = null
-            } else {
-                Toast.makeText(
-                    context,
-                    "Failed to publish sighting",
-                    Toast.LENGTH_SHORT
-                ).show()
+    val publishAction: () -> Unit = {
+        if (lat == null || lon == null) {
+            Toast.makeText(
+                context,
+                "Invalid location. Enter latitude, longitude",
+                Toast.LENGTH_SHORT
+            ).show()
+        } else {
+            onPublish(species, location, notes, lat, lon) { success ->
+                if (success) {
+                    Toast.makeText(
+                        context,
+                        "Sighting published!",
+                        Toast.LENGTH_SHORT
+                    ).show()
+
+                    species = ""
+                    location = ""
+                    notes = ""
+                    lat = null
+                    lon = null
+                } else {
+                    Toast.makeText(
+                        context,
+                        "Failed to publish sighting",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
             }
         }
     }
+
 
     Column(
         modifier = Modifier
@@ -877,7 +937,31 @@ fun PublishSightingScreen(
 
                 LocationField(
                     location = location,
-                    onLocationChange = { location = it; lat = null; lon = null },
+                    //onLocationChange = { location = it; lat = null; lon = null },
+                    onLocationChange = { text ->
+                        location = text
+
+                        val coordinates = text.split(",")
+
+                        if (coordinates.size == 2) {
+                            val latitude = coordinates[0].trim().toDoubleOrNull()
+                            val longitude = coordinates[1].trim().toDoubleOrNull()
+
+                            if (latitude != null && longitude != null &&
+                                latitude in -90.0..90.0 &&
+                                longitude in -180.0..180.0
+                            ) {
+                                lat = latitude
+                                lon = longitude
+                            } else {
+                                lat = null
+                                lon = null
+                            }
+                        } else {
+                            lat = null
+                            lon = null
+                        }
+                    },
                     hasCoordinates = lat != null && lon != null,
                     locating = locating,
                     onAuto = locateAction,
@@ -952,7 +1036,31 @@ fun PublishSightingScreen(
 
                     LocationField(
                         location = location,
-                        onLocationChange = { location = it; lat = null; lon = null },
+                        //onLocationChange = { location = it; lat = null; lon = null },
+                        onLocationChange = { text ->
+                            location = text
+
+                            val coordinates = text.split(",")
+
+                            if (coordinates.size == 2) {
+                                val latitude = coordinates[0].trim().toDoubleOrNull()
+                                val longitude = coordinates[1].trim().toDoubleOrNull()
+
+                                if (latitude != null && longitude != null &&
+                                    latitude in -90.0..90.0 &&
+                                    longitude in -180.0..180.0
+                                ) {
+                                    lat = latitude
+                                    lon = longitude
+                                } else {
+                                    lat = null
+                                    lon = null
+                                }
+                            } else {
+                                lat = null
+                                lon = null
+                            }
+                        },
                         hasCoordinates = lat != null && lon != null,
                         locating = locating,
                         onAuto = locateAction,

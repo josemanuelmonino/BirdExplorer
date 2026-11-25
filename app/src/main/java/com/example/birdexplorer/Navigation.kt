@@ -10,6 +10,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.birdexplorer.ui.MapViewModel
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.graphics.graphicsLayer
 
 enum class Screens {
     Home,
@@ -25,15 +29,23 @@ enum class Screens {
 @Composable
 fun BirdExplorerApp(
     modifier: Modifier = Modifier,
-    mqttViewModel: MqttViewModel
+    mqttViewModel: MqttViewModel,
+    explorationViewModel: ExplorationViewModel
 ) {
     val navController = rememberNavController()
+    var colorFilterEnabled by rememberSaveable { mutableStateOf(false) }
     val mqttUiState by mqttViewModel.uiState.collectAsState()
 
     NavHost(
         navController = navController,
         startDestination = Screens.Home.name,
-        modifier = modifier
+        modifier = modifier.graphicsLayer {
+            colorFilter = if (colorFilterEnabled) {
+                ColorFilters.deuteranopiaFilter
+            } else {
+                null
+            }
+        }
     ) {
 
         composable(Screens.Home.name) {
@@ -52,7 +64,9 @@ fun BirdExplorerApp(
                 },
                 onPublishSighting = {
                     navController.navigate(Screens.Sightings.name)
-                }
+                },
+                colorFilterEnabled = colorFilterEnabled,
+                onColorFilterChange = { colorFilterEnabled = it }
             )
         }
 
@@ -84,8 +98,6 @@ fun BirdExplorerApp(
         }
 
         composable(Screens.ExplorationMode.name) {
-            val explorationViewModel: ExplorationViewModel = viewModel()
-
             ExplorationModeScreen(
                 viewModel = explorationViewModel,
                 onBack = {
@@ -96,6 +108,7 @@ fun BirdExplorerApp(
                 }
             )
         }
+
 
         composable(Screens.Sightings.name) {
             SightingsScreen(

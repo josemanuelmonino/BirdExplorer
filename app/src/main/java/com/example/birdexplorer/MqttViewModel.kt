@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.collect
 import java.util.UUID
 import org.meshtastic.mqtt.PublishProperties
 
-private const val BROKER = "tcp://192.168.1.83:1883" // IP de ejemplo
+private const val BROKER = "tcp://192.168.1.19:1883"
 private const val PUB_TOPIC = "birdexplorer/sightings"
 private const val SUB_TOPIC = "birdexplorer/sightings/#"
 
