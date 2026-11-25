@@ -224,55 +224,124 @@ private fun SpeciesList(
 private fun SightingDetailSheet(sighting: BirdSighting, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            AsyncImage(
-                model = sighting.photoUrl,
-                contentDescription = sighting.commonName,
-                contentScale = ContentScale.Crop,
+        if (isLandscape) {
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(220.dp)
-                    .clip(RoundedCornerShape(12.dp))
-            )
-            Text(sighting.commonName, style = MaterialTheme.typography.titleLarge)
-            Text(
-                sighting.scientificName,
-                style = MaterialTheme.typography.bodyMedium,
-                fontStyle = FontStyle.Italic
-            )
-            Text("Date: ${sighting.observedOn ?: "Unknown"}")
-            Text("Place: ${sighting.place ?: "Unknown place"}")
-            Text("Coordinates: %.4f, %.4f".format(sighting.lat, sighting.lon))
-            // The photo license asks to show who took it
-            sighting.attribution?.let {
-                Text("Photo: $it", style = MaterialTheme.typography.bodySmall)
-            }
-
-            Button(
-                onClick = {
-                    // Opens any maps app on the place of the sighting
-                    val uri = Uri.parse(
-                        "geo:${sighting.lat},${sighting.lon}?q=${sighting.lat},${sighting.lon}" +
-                                "(${Uri.encode(sighting.commonName)})"
-                    )
-                    try {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
-                    } catch (e: ActivityNotFoundException) {
-                        Toast.makeText(context, "No maps app found", Toast.LENGTH_SHORT).show()
-                    }
-                },
-                modifier = Modifier.fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("How to get there")
+                AsyncImage(
+                    model = sighting.photoUrl,
+                    contentDescription = sighting.commonName,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(max = 220.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(sighting.commonName, style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        sighting.scientificName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontStyle = FontStyle.Italic
+                    )
+                    Text(
+                        "Date: ${sighting.observedOn ?: "Unknown"}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        "Place: ${sighting.place ?: "Unknown place"}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        "Coordinates: %.4f, %.4f".format(sighting.lat, sighting.lon),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    // The photo license asks to show who took it
+                    sighting.attribution?.let {
+                        Text("Photo: $it", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Button(
+                        onClick = {
+                            // Opens any maps app on the place of the sighting
+                            val uri = Uri.parse(
+                                "geo:${sighting.lat},${sighting.lon}?q=${sighting.lat},${sighting.lon}" +
+                                        "(${Uri.encode(sighting.commonName)})"
+                            )
+                            try {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                            } catch (e: ActivityNotFoundException) {
+                                Toast.makeText(context, "No maps app found", Toast.LENGTH_SHORT)
+                                    .show()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("How to get there")
+                    }
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                AsyncImage(
+                    model = sighting.photoUrl,
+                    contentDescription = sighting.commonName,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                )
+                Text(sighting.commonName, style = MaterialTheme.typography.titleLarge)
+                Text(
+                    sighting.scientificName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontStyle = FontStyle.Italic
+                )
+                Text("Date: ${sighting.observedOn ?: "Unknown"}")
+                Text("Place: ${sighting.place ?: "Unknown place"}")
+                Text("Coordinates: %.4f, %.4f".format(sighting.lat, sighting.lon))
+                // The photo license asks to show who took it
+                sighting.attribution?.let {
+                    Text("Photo: $it", style = MaterialTheme.typography.bodySmall)
+                }
+
+                Button(
+                    onClick = {
+                        // Opens any maps app on the place of the sighting
+                        val uri = Uri.parse(
+                            "geo:${sighting.lat},${sighting.lon}?q=${sighting.lat},${sighting.lon}" +
+                                    "(${Uri.encode(sighting.commonName)})"
+                        )
+                        try {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                        } catch (e: ActivityNotFoundException) {
+                            Toast.makeText(context, "No maps app found", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("How to get there")
+                }
             }
         }
     }
@@ -963,53 +1032,103 @@ fun ExploreByAreaScreen(
         }
     }
 
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    var carouselExpanded by rememberSaveable { mutableStateOf(true) }
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 20.dp)
+            .padding(
+                horizontal = if (isLandscape) 12.dp else 16.dp,
+                vertical = if (isLandscape) 8.dp else 20.dp
+            )
     ) {
-        ScreenTitle("Explore by area")
-
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ViewToggleButton(
-                "List",
-                active = !showMap,
-                onClick = { showMap = false },
-                modifier = Modifier.weight(1f)
-            )
-            ViewToggleButton(
-                "Map",
-                active = showMap,
-                onClick = { showMap = true },
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        //Region filter: loads the sightings and moves the map to that region
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(spainRegions) { r ->
-                FilterChip(
-                    selected = selected == r.name,
-                    onClick = {
-                        selected = r.name
-                        mapViewModel.onMarkerSelected(null)
-                        viewModel.loadByArea(r.neLat, r.neLng, r.swLat, r.swLng)
-                        mapViewModel.onAreaCenterSelected(
-                            GeoPoint(
-                                (r.neLat + r.swLat) / 2,
-                                (r.neLng + r.swLng) / 2
-                            ),
-                            zoomFor(r)
+        if (isLandscape) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ViewToggleButton(
+                    "List",
+                    active = !showMap,
+                    onClick = { showMap = false }
+                )
+                ViewToggleButton(
+                    "Map",
+                    active = showMap,
+                    onClick = { showMap = true }
+                )
+                //Region filter: loads the sightings and moves the map to that region
+                LazyRow(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(spainRegions) { r ->
+                        FilterChip(
+                            selected = selected == r.name,
+                            onClick = {
+                                selected = r.name
+                                mapViewModel.onMarkerSelected(null)
+                                viewModel.loadByArea(r.neLat, r.neLng, r.swLat, r.swLng)
+                                mapViewModel.onAreaCenterSelected(
+                                    GeoPoint(
+                                        (r.neLat + r.swLat) / 2,
+                                        (r.neLng + r.swLng) / 2
+                                    ),
+                                    zoomFor(r)
+                                )
+                            },
+                            label = { Text(r.name) }
                         )
-                    },
-                    label = { Text(r.name) }
+                    }
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+        } else {
+            ScreenTitle("Explore by area")
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ViewToggleButton(
+                    "List",
+                    active = !showMap,
+                    onClick = { showMap = false },
+                    modifier = Modifier.weight(1f)
+                )
+                ViewToggleButton(
+                    "Map",
+                    active = showMap,
+                    onClick = { showMap = true },
+                    modifier = Modifier.weight(1f)
                 )
             }
-        }
 
-        Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(12.dp))
+
+            //Region filter: loads the sightings and moves the map to that region
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(spainRegions) { r ->
+                    FilterChip(
+                        selected = selected == r.name,
+                        onClick = {
+                            selected = r.name
+                            mapViewModel.onMarkerSelected(null)
+                            viewModel.loadByArea(r.neLat, r.neLng, r.swLat, r.swLng)
+                            mapViewModel.onAreaCenterSelected(
+                                GeoPoint(
+                                    (r.neLat + r.swLat) / 2,
+                                    (r.neLng + r.swLng) / 2
+                                ),
+                                zoomFor(r)
+                            )
+                        },
+                        label = { Text(r.name) }
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+        }
 
         if (showMap) {
             Box(
@@ -1028,12 +1147,50 @@ fun ExploreByAreaScreen(
                     }
                 )
                 if (areaItems.isNotEmpty()) {
-                    SightingsCarousel(
-                        areaItems = areaItems,
-                        selectedId = mapState.selectedMarkerId,
-                        { onItemTapped(it) },
-                        modifier = Modifier.align(Alignment.BottomCenter)
-                    )
+                    if (isLandscape && !carouselExpanded) {
+                        Surface(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(8.dp)
+                                .clickable { carouselExpanded = true },
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                            tonalElevation = 3.dp
+                        ) {
+                            val word = if (areaItems.size == 1) "sighting" else "sightings"
+                            Text(
+                                text = "${areaItems.size} $word - Tap to show list",
+                                style = MaterialTheme.typography.labelLarge,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                            )
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            if (isLandscape) {
+                                Surface(
+                                    modifier = Modifier
+                                        .padding(bottom = 4.dp)
+                                        .clickable { carouselExpanded = false },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f)
+                                ) {
+                                    Text(
+                                        text = "Hide list",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                            SightingsCarousel(
+                                areaItems = areaItems,
+                                selectedId = mapState.selectedMarkerId,
+                                onItemClick = { onItemTapped(it) }
+                            )
+                        }
+                    }
                 }
                 if (uiState.isLoading) {
                     CircularProgressIndicator(Modifier.align(Alignment.Center))
