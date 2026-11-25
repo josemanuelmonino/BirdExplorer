@@ -72,9 +72,12 @@ fun BirdExplorerApp(
 
         composable(Screens.ExploreNearMe.name) {
             val birdViewModel: BirdViewModel = viewModel()
+            val mapViewModel: MapViewModel = viewModel()
 
             ExploreNearMeScreen(
-                viewModel = birdViewModel
+                viewModel = birdViewModel,
+                mapViewModel = mapViewModel,
+                mqttSightings = mqttUiState.sightings
             )
         }
 

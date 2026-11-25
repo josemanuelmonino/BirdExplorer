@@ -5,12 +5,12 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.location.Location
 import android.location.LocationManager
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
-import android.view.RoundedRectBlurRegion
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -29,16 +29,15 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
@@ -52,13 +51,16 @@ import com.example.birdexplorer.data.BirdSighting
 import com.example.birdexplorer.data.remote.Taxon
 import com.example.birdexplorer.ui.ExploreAreaScreen
 import com.example.birdexplorer.ui.MapMarkerItem
+import com.example.birdexplorer.ui.MapStyle
 import com.example.birdexplorer.ui.MapViewModel
 import com.example.birdexplorer.ui.MarkerType
+import com.example.birdexplorer.ui.OsmMap
 import org.osmdroid.util.GeoPoint
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.ln
+import kotlin.math.roundToInt
 
 // Obtains actual GPS location if there is no error
 fun fetchLocation(context: Context, onLocation: (Location) -> Unit, onFail: () -> Unit) {
@@ -277,16 +279,36 @@ private fun SightingDetailSheet(sighting: BirdSighting, onDismiss: () -> Unit) {
 }
 
 // ---------- Explore near me ----------
+private const val NEAR_ME_MAX_RADIUS_KM = 10
+private const val NEAR_ME_MIN_RADIUS_M = 500f
+private const val NEAR_ME_MAX_RADIUS_M = 10_000f
+
+private fun formatRadius(meters: Float): String =
+    if (meters < 1000f) "${meters.roundToInt()} m"
+    else String.format(Locale.US, "%.1f km", meters / 1000f)
+
+
 @Composable
 fun ExploreNearMeScreen(
     viewModel: BirdViewModel,
-    modifier: Modifier = Modifier
+    mapViewModel: MapViewModel,
+    modifier: Modifier = Modifier,
+    mqttSightings: List<Sighting> = emptyList()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val mapState by mapViewModel.uiState.collectAsState()
     val context = LocalContext.current
     ScreenEffects(uiState, viewModel)
 
     var locating by rememberSaveable { mutableStateOf(false) }
+    var mqttDetail by remember { mutableStateOf<Sighting?>(null) }
+    var styleMenuExpanded by remember { mutableStateOf(false) }
+
+    // Loads API sightings up to max slider radius (10 km) so sliding never triggers extra API calls
+    fun loadSightingsAround(point: GeoPoint) {
+        mapViewModel.onMarkerSelected(null)
+        viewModel.loadNearMe(point.latitude, point.longitude, NEAR_ME_MAX_RADIUS_KM)
+    }
 
     fun requestLocationAndLoad() {
         locating = true
@@ -294,11 +316,16 @@ fun ExploreNearMeScreen(
             context,
             onLocation = { loc ->
                 locating = false
-                viewModel.loadNearMe(loc.latitude, loc.longitude, 10)
+                val point = GeoPoint(loc.latitude, loc.longitude)
+                mapViewModel.onDeviceLocationUpdated(point)
+                loadSightingsAround(point)
             },
             onFail = {
                 locating = false
                 Toast.makeText(context, "Could not get your location", Toast.LENGTH_LONG).show()
+                if (uiState.sightings.isEmpty()) {
+                    loadSightingsAround(mapState.searchCenter)
+                }
             }
         )
     }
@@ -306,8 +333,14 @@ fun ExploreNearMeScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
-        if (result.values.any { it }) requestLocationAndLoad()
-        else Toast.makeText(context, "Location permission denied", Toast.LENGTH_SHORT).show()
+        if (result.values.any { it }) {
+            requestLocationAndLoad()
+        } else {
+            Toast.makeText(context, "Location permission denied", Toast.LENGTH_SHORT).show()
+            if (uiState.sightings.isEmpty()) {
+                loadSightingsAround(mapState.searchCenter)
+            }
+        }
     }
 
     fun checkPermissionAndLoad() {
@@ -325,31 +358,315 @@ fun ExploreNearMeScreen(
         )
     }
 
-    // Automated loading that launches once
+    // Initial load when entering the screen
     LaunchedEffect(Unit) {
-        if (viewModel.uiState.value.sightings.isEmpty()) checkPermissionAndLoad()
+        if (mapState.userLocation == null) {
+            checkPermissionAndLoad()
+        } else if (uiState.sightings.isEmpty()) {
+            loadSightingsAround(mapState.searchCenter)
+        }
     }
+
+    // Unified list (MQTT first, then API) filtered strictly by distance to searchCenter <= radiusMeters
+    val nearbyItems = remember(
+        uiState.sightings,
+        mqttSightings,
+        mapState.searchCenter,
+        mapState.radiusMeters
+    ) {
+        val all = (mqttSightings.mapNotNull { it.toAreaItem() } + uiState.sightings.map { it.toAreaItem() })
+            .distinctBy { it.id }
+
+        all.filter { item ->
+            mapState.searchCenter.distanceToAsDouble(
+                GeoPoint(item.latitude, item.longitude)
+            ) <= mapState.radiusMeters
+        }
+    }
+
+    // Sync markers rendered on OsmMap with the filtered items
+    LaunchedEffect(nearbyItems) {
+        mapViewModel.setApiObservations(
+            nearbyItems.filter { it.type == MarkerType.API_OBSERVATION }.map { it.toMarkerItem() }
+        )
+        mapViewModel.setMqttSightings(
+            nearbyItems.filter { it.type == MarkerType.MQTT_USER_SIGHTING }.map { it.toMarkerItem() }
+        )
+    }
+
+    // First tap: select + zoom to pin. Second tap on the same item: open detail sheet
+    fun onItemTapped(item: AreaItem) {
+        if (mapState.selectedMarkerId == item.id) {
+            item.api?.let { viewModel.selectSighting(it) }
+            item.mqtt?.let { mqttDetail = it }
+        } else {
+            mapViewModel.onMarkerSelected(item.id)
+            mapViewModel.focusOnMarker(GeoPoint(item.latitude, item.longitude), FOCUS_ZOOM)
+        }
+    }
+
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    var carouselExpanded by rememberSaveable { mutableStateOf(true) }
 
     Box(modifier = modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 20.dp)) {
-            ScreenTitle("Birds near you")
-            SightingsList(
-                uiState = uiState,
-                emptyText = "No sightings to show",
-                onSightingClick = viewModel::selectSighting,
-                modifier = Modifier.weight(1f).fillMaxWidth()
-            )
+        OsmMap(
+            center = mapState.cameraCenter,
+            zoom = mapState.zoom,
+            recenterTrigger = mapState.recenterTrigger,
+            tileSource = mapState.selectedStyle.tileSource,
+            markers = mapState.visibleLocalMarkers,
+            userLocation = mapState.userLocation,
+            circleCenter = mapState.searchCenter,
+            circleRadiusMeters = mapState.radiusMeters.toDouble(),
+            onMapLongPress = { pressedPoint ->
+                mapViewModel.onSearchCenterChanged(pressedPoint, animateCamera = true)
+                loadSightingsAround(pressedPoint)
+                Toast.makeText(
+                    context,
+                    String.format(
+                        Locale.US,
+                        "Search center moved (%.4f, %.4f)",
+                        pressedPoint.latitude,
+                        pressedPoint.longitude
+                    ),
+                    Toast.LENGTH_SHORT
+                ).show()
+            },
+            onZoomChanged = { mapViewModel.onZoomChanged(it) },
+            onMarkerClick = { marker ->
+                nearbyItems.firstOrNull { it.id == marker.id }?.let { onItemTapped(it) }
+            },
+            selectedMarkerId = mapState.selectedMarkerId
+        )
+
+        if (isLandscape) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
+                tonalElevation = 3.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box {
+                        FilledTonalButton(
+                            onClick = { styleMenuExpanded = true },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text(mapState.selectedStyle.label, style = MaterialTheme.typography.labelMedium)
+                        }
+                        DropdownMenu(
+                            expanded = styleMenuExpanded,
+                            onDismissRequest = { styleMenuExpanded = false }
+                        ) {
+                            MapStyle.entries.forEach { style ->
+                                DropdownMenuItem(
+                                    text = { Text(style.label) },
+                                    onClick = {
+                                        mapViewModel.onMapStyleSelected(style)
+                                        styleMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = formatRadius(mapState.radiusMeters),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+
+                    Slider(
+                        value = mapState.radiusMeters,
+                        onValueChange = { raw ->
+                            val snapped = ((raw / 500f).roundToInt() * 500f)
+                                .coerceIn(NEAR_ME_MIN_RADIUS_M, NEAR_ME_MAX_RADIUS_M)
+                            mapViewModel.onRadiusChanged(snapped)
+                        },
+                        valueRange = NEAR_ME_MIN_RADIUS_M..NEAR_ME_MAX_RADIUS_M,
+                        steps = 18,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    Button(
+                        onClick = {
+                            if (!locating) {
+                                mapViewModel.onMarkerSelected(null)
+                                checkPermissionAndLoad()
+                            }
+                        },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        if (locating) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        } else {
+                            Text("My location", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Top-left: Map style selector (Standard / Topo / Satellite)
+                    Box {
+                        FilledTonalButton(onClick = { styleMenuExpanded = true }) {
+                            Text("${mapState.selectedStyle.label} map")
+                        }
+                        DropdownMenu(
+                            expanded = styleMenuExpanded,
+                            onDismissRequest = { styleMenuExpanded = false }
+                        ) {
+                            MapStyle.entries.forEach { style ->
+                                DropdownMenuItem(
+                                    text = { Text(style.label) },
+                                    onClick = {
+                                        mapViewModel.onMapStyleSelected(style)
+                                        styleMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // Top-right: Center on my location button
+                    Button(
+                        onClick = {
+                            if (!locating) {
+                                mapViewModel.onMarkerSelected(null)
+                                checkPermissionAndLoad()
+                            }
+                        }
+                    ) {
+                        if (locating) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        } else {
+                            Text("My location")
+                        }
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
+                    tonalElevation = 3.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Column(modifier = Modifier.width(120.dp)) {
+                            Text(
+                                text = "Radius: ${formatRadius(mapState.radiusMeters)}",
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                            Text(
+                                text = "Hold map to move",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Slider(
+                            value = mapState.radiusMeters,
+                            onValueChange = { raw ->
+                                val snapped = ((raw / 500f).roundToInt() * 500f)
+                                    .coerceIn(NEAR_ME_MIN_RADIUS_M, NEAR_ME_MAX_RADIUS_M)
+                                mapViewModel.onRadiusChanged(snapped)
+                            },
+                            valueRange = NEAR_ME_MIN_RADIUS_M..NEAR_ME_MAX_RADIUS_M,
+                            steps = 18,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
         }
 
-        // Asks for the location again
-        FloatingActionButton(
-            onClick = { if (!locating) checkPermissionAndLoad() },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
-        ) {
-            if (locating) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-            else Icon(Icons.Default.Refresh, contentDescription = "Refresh location")
+        // Bottom: Unified carousel with API + MQTT sightings inside the circle
+        if (nearbyItems.isNotEmpty()) {
+            if (isLandscape && !carouselExpanded) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(8.dp)
+                        .clickable { carouselExpanded = true },
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                    tonalElevation = 3.dp
+                ) {
+                    val word = if (nearbyItems.size == 1) "sighting" else "sightings"
+                    Text(
+                        text = "${nearbyItems.size} $word - Tap to show list",
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    if (isLandscape) {
+                        Surface(
+                            modifier = Modifier
+                                .padding(bottom = 4.dp)
+                                .clickable { carouselExpanded = false },
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f)
+                        ) {
+                            Text(
+                                text = "Hide list",
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                    SightingsCarousel(
+                        areaItems = nearbyItems,
+                        selectedId = mapState.selectedMarkerId,
+                        onItemClick = { onItemTapped(it) }
+                    )
+                }
+            }
+        }
+
+        if (uiState.isLoading) {
+            CircularProgressIndicator(Modifier.align(Alignment.Center))
         }
     }
+
+    // Detail sheet for MQTT sightings (API ones are handled by ScreenEffects)
+    mqttDetail?.let { MqttDetailSheet(it, onDismiss = { mqttDetail = null }) }
 }
 
 // ---------- Explore by area ----------
@@ -382,7 +699,7 @@ private fun BirdSighting.toAreaItem() = AreaItem(
     title = commonName,
     scientificName = scientificName,
     place = place ?: "Unknown place",
-    extra= observedOn ?: "",
+    extra = observedOn ?: "",
     photoUrl = photoUrl,
     latitude = lat,
     longitude = lon,
@@ -508,7 +825,7 @@ private fun SightingsCarousel(
 
     // When a pin is selected, the carousel scrolls to its card
     LaunchedEffect(selectedId) {
-        val index = areaItems.indexOfFirst { it.id == selectedId}
+        val index = areaItems.indexOfFirst { it.id == selectedId }
         if (index >= 0) listState.animateScrollToItem(index)
     }
 
@@ -535,58 +852,58 @@ private fun SightingsCarousel(
                         modifier = Modifier.width(260.dp),
                         border = if (item.id == selectedId)
                             BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .clickable { onItemClick(item) }
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .clickable { onItemClick(item) }
-                                    .padding(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (item.photoUrl != null) {
-                                    AsyncImage(
-                                        model = item.photoUrl,
-                                        contentDescription = item.title,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.size(64.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                    )
-                                } else {
-                                    // MQTT sightings have no photo
-                                    Box(
-                                        modifier = Modifier
-                                            .size(64.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(MaterialTheme.colorScheme.secondaryContainer),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Image(
-                                            painter = painterResource(R.drawable.ic_marker_mqtt),
-                                            contentDescription = "User sighting",
-                                            modifier = Modifier.size(32.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(Modifier.width(8.dp))
-                                Column {
-                                    SourceBadge(item.type)
-                                    Text(
-                                        item.title,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        item.place,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        item.extra,
-                                        style = MaterialTheme.typography.bodySmall
+                            if (item.photoUrl != null) {
+                                AsyncImage(
+                                    model = item.photoUrl,
+                                    contentDescription = item.title,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.size(64.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                )
+                            } else {
+                                // MQTT sightings have no photo
+                                Box(
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.secondaryContainer),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Image(
+                                        painter = painterResource(R.drawable.ic_marker_mqtt),
+                                        contentDescription = "User sighting",
+                                        modifier = Modifier.size(32.dp)
                                     )
                                 }
                             }
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                SourceBadge(item.type)
+                                Text(
+                                    item.title,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    item.place,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    item.extra,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -607,7 +924,7 @@ fun ExploreByAreaScreen(
 
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
     var showMap by rememberSaveable { mutableStateOf(false) } //list is the one active by default
-    var mqttDetail by remember { mutableStateOf<Sighting?>(null)}
+    var mqttDetail by remember { mutableStateOf<Sighting?>(null) }
 
     val region = spainRegions.firstOrNull { it.name == selected }
 
@@ -628,10 +945,10 @@ fun ExploreByAreaScreen(
     // The map always draws the same sightings as the carousel
     LaunchedEffect(areaItems) {
         mapViewModel.setApiObservations(
-            areaItems.filter { it.type == MarkerType.API_OBSERVATION }.map {it.toMarkerItem()}
+            areaItems.filter { it.type == MarkerType.API_OBSERVATION }.map { it.toMarkerItem() }
         )
         mapViewModel.setMqttSightings(
-            areaItems.filter { it.type == MarkerType.MQTT_USER_SIGHTING }.map {it.toMarkerItem()}
+            areaItems.filter { it.type == MarkerType.MQTT_USER_SIGHTING }.map { it.toMarkerItem() }
         )
     }
 
@@ -646,9 +963,10 @@ fun ExploreByAreaScreen(
         }
     }
 
-    Column(modifier = modifier
-        .fillMaxSize()
-        .padding(horizontal = 16.dp, vertical = 20.dp)
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 20.dp)
     ) {
         ScreenTitle("Explore by area")
 
@@ -694,25 +1012,26 @@ fun ExploreByAreaScreen(
         Spacer(Modifier.height(12.dp))
 
         if (showMap) {
-            Box(Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
             ) {
                 ExploreAreaScreen(
                     mapViewModel = mapViewModel,
                     showSearchBar = false,
-                    onMarkerClick =  { marker ->
+                    onMarkerClick = { marker ->
                         areaItems
                             .firstOrNull { it.id == marker.id }
-                            ?.let{onItemTapped(it)}
+                            ?.let { onItemTapped(it) }
                     }
                 )
                 if (areaItems.isNotEmpty()) {
                     SightingsCarousel(
                         areaItems = areaItems,
                         selectedId = mapState.selectedMarkerId,
-                        {onItemTapped(it)},
+                        { onItemTapped(it) },
                         modifier = Modifier.align(Alignment.BottomCenter)
                     )
                 }
@@ -724,7 +1043,7 @@ fun ExploreByAreaScreen(
             SightingsList(
                 uiState = uiState,
                 emptyText = if (selected == null) "Pick a region to see its bird sightings"
-                            else "No sightings to show",
+                else "No sightings to show",
                 onSightingClick = viewModel::selectSighting,
                 modifier = Modifier.weight(1f).fillMaxWidth()
             )

@@ -9,6 +9,7 @@ import org.osmdroid.util.GeoPoint
 data class MapUiState(
     val selectedStyle: MapStyle = MapStyle.STANDARD,
     val searchCenter: GeoPoint = DEFAULT_CENTER,
+    val cameraCenter: GeoPoint = DEFAULT_CENTER,
     val zoom: Double = DEFAULT_ZOOM,
     val radiusMeters: Float = 500f,
     val userLocation: GeoPoint? = null,
@@ -49,10 +50,16 @@ class MapViewModel : ViewModel() {
         _uiState.update { it.copy(radiusMeters = newRadius) }
     }
 
-    fun onSearchCenterChanged(newCenter: GeoPoint, animateCamera: Boolean = false) {
+    fun onSearchCenterChanged(
+        newCenter: GeoPoint,
+        animateCamera: Boolean = false,
+        zoom: Double? = null
+    ) {
         _uiState.update { state ->
             state.copy(
                 searchCenter = newCenter,
+                cameraCenter = newCenter,
+                zoom = zoom ?: state.zoom,
                 recenterTrigger = if (animateCamera) state.recenterTrigger + 1 else state.recenterTrigger
             )
         }
@@ -63,6 +70,7 @@ class MapViewModel : ViewModel() {
             state.copy(
                 userLocation = location,
                 searchCenter = location,
+                cameraCenter = location,
                 recenterTrigger = state.recenterTrigger + 1
             )
         }
@@ -80,6 +88,16 @@ class MapViewModel : ViewModel() {
 
     fun onMarkerSelected(id: String?) {
         _uiState.update { it.copy(selectedMarkerId = id) }
+    }
+
+    fun focusOnMarker(point: GeoPoint, zoom: Double) {
+        _uiState.update { state ->
+            state.copy(
+                cameraCenter = point,
+                zoom = zoom,
+                recenterTrigger = state.recenterTrigger + 1
+            )
+        }
     }
 
     // INTEGRATION FOR API AND MQTT
