@@ -191,7 +191,7 @@ fun OsmMap(
                     relatedObject = item
                     setOnMarkerClickListener { _, _->
                         val handler = currentOnMarkerClick
-                        if (handler != null) {
+                        if (handler != null && item.type == MarkerType.API_OBSERVATION) {
                             handler(item)
                             true //if handled, no info bubble
                         } else {

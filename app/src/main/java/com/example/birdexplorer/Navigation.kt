@@ -70,7 +70,8 @@ fun BirdExplorerApp(
 
             ExploreByAreaScreen(
                 viewModel = birdViewModel,
-                mapViewModel = mapViewModel
+                mapViewModel = mapViewModel,
+                mqttSightings = mqttUiState.sightings
             )
         }
 
@@ -112,11 +113,13 @@ fun BirdExplorerApp(
                 onBack = {
                     navController.popBackStack()
                 },
-                onPublish = { species, location, notes, onResult ->
+                onPublish = { species, location, notes, lat, lon, onResult ->
                     mqttViewModel.publishSighting(
                         species = species,
                         location = location,
                         notes = notes,
+                        lat = lat,
+                        lon = lon,
                         onResult = onResult
                     )
                 }

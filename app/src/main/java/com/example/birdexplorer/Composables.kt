@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -50,6 +49,18 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import kotlinx.coroutines.Dispatchers
+import android.content.Context
+import android.location.Address
+import android.location.Geocoder
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.Locale
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
 
 @Composable
@@ -712,13 +723,17 @@ fun SightingOption(
 @Composable
 fun PublishSightingScreen(
     onBack: () -> Unit,
-    onPublish: (String, String, String, (Boolean) -> Unit) -> Unit
+    onPublish: (String, String, String, Double?, Double?, (Boolean) -> Unit) -> Unit
 ) {
     var species by rememberSaveable { mutableStateOf("") }
     var location by rememberSaveable { mutableStateOf("") }
     var notes by rememberSaveable { mutableStateOf("") }
+    var lat by rememberSaveable { mutableStateOf<Double?>(null) }
+    var lon by rememberSaveable { mutableStateOf<Double?>(null) }
+    var locating by remember { mutableStateOf(false)}
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     val isPortrait = (
             LocalConfiguration.current.orientation ==
@@ -728,9 +743,49 @@ fun PublishSightingScreen(
     val green = Color(0xFF245C3C)
     val background = Color(0xFFF6F8F2)
 
+    // Gets the phone's position and fills the Location field with its name
+    fun useMyLocation() {
+        locating = true
+        fetchLocation(
+            context,
+            onLocation = { loc ->
+                lat = loc.latitude
+                lon = loc.longitude
+                scope.launch {
+                    location = placeName(context, loc.latitude, loc.longitude)
+                        ?: String.format(Locale.US, "%.4f, %.4f", loc.latitude, loc.longitude)
+                    locating = false
+                }
+            },
+            onFail = {
+                locating = false
+                Toast.makeText(context, "Could not get your location", Toast.LENGTH_LONG).show()
+            }
+        )
+    }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        if (result.values.any { it }) useMyLocation()
+        else Toast.makeText(context, "Location permission denied", Toast.LENGTH_SHORT).show()
+    }
+
+    val locateAction: () -> Unit = {
+        val permissions = arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+        val granted = permissions.any {
+            ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+        }
+        if (granted) useMyLocation() else locationPermissionLauncher.launch(permissions)
+    }
+
+
     // Acción compartida por los botones Publish de ambas orientaciones
     val publishAction: () -> Unit = {
-        onPublish(species, location, notes) { success ->
+        onPublish(species, location, notes, lat, lon) { success ->
             if (success) {
                 Toast.makeText(
                     context,
@@ -741,6 +796,8 @@ fun PublishSightingScreen(
                 species = ""
                 location = ""
                 notes = ""
+                lat = null
+                lon = null
             } else {
                 Toast.makeText(
                     context,
@@ -818,19 +875,13 @@ fun PublishSightingScreen(
                     )
                 )
 
-                OutlinedTextField(
-                    value = location,
-                    onValueChange = { location = it },
-                    label = { Text("Location") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = green,
-                        focusedLabelColor = green,
-                        focusedContainerColor = Color.White,
-                        unfocusedContainerColor = Color.White
-                    )
+                LocationField(
+                    location = location,
+                    onLocationChange = { location = it; lat = null; lon = null },
+                    hasCoordinates = lat != null && lon != null,
+                    locating = locating,
+                    onAuto = locateAction,
+                    green = green
                 )
 
                 OutlinedTextField(
@@ -899,19 +950,13 @@ fun PublishSightingScreen(
                         )
                     )
 
-                    OutlinedTextField(
-                        value = location,
-                        onValueChange = { location = it },
-                        label = { Text("Location") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = green,
-                            focusedLabelColor = green,
-                            focusedContainerColor = Color.White,
-                            unfocusedContainerColor = Color.White
-                        )
+                    LocationField(
+                        location = location,
+                        onLocationChange = { location = it; lat = null; lon = null },
+                        hasCoordinates = lat != null && lon != null,
+                        locating = locating,
+                        onAuto = locateAction,
+                        green = green
                     )
 
                     Row(
@@ -1147,6 +1192,76 @@ private fun SightingCard(sighting: Sighting) {
             }
         }
     }
+}
+
+// Coordinates -> readable name ("Calle X, Madrid"). Null if the geocoder fails.
+private suspend fun placeName(context: Context, lat: Double, lon: Double): String? {
+    if (!Geocoder.isPresent()) return null
+    val geocoder = Geocoder(context, Locale.getDefault())
+
+    val address: Address? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        suspendCoroutine { cont ->
+            geocoder.getFromLocation(lat, lon, 1, object : Geocoder.GeocodeListener {
+                override fun onGeocode(addresses: MutableList<Address>) {
+                    cont.resume(addresses.firstOrNull())
+                }
+                override fun onError(errorMessage: String?) {
+                    cont.resume(null)
+                }
+            })
+        }
+    } else {
+        withContext(Dispatchers.IO) {
+            @Suppress("DEPRECATION")
+            runCatching { geocoder.getFromLocation(lat, lon, 1)?.firstOrNull() }.getOrNull()
+        }
+    }
+
+    return address?.let {
+        listOfNotNull(it.thoroughfare, it.locality ?: it.subAdminArea)
+            .joinToString(", ")
+            .ifBlank { it.getAddressLine(0) ?: "" }
+            .ifBlank { null }
+    }
+}
+
+// Location field with an "Auto" button inside, so it takes no extra height in landscape
+@Composable
+private fun LocationField(
+    location: String,
+    onLocationChange: (String) -> Unit,
+    hasCoordinates: Boolean,
+    locating: Boolean,
+    onAuto: () -> Unit,
+    green: Color
+) {
+    val supporting: (@Composable () -> Unit)? =
+        if (hasCoordinates) { { Text("Coordinates saved: it will appear on the map") } } else null
+
+    OutlinedTextField(
+        value = location,
+        onValueChange = onLocationChange,
+        label = { Text("Location") },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        shape = RoundedCornerShape(12.dp),
+        trailingIcon = {
+            TextButton(
+                onClick = onAuto,
+                enabled = !locating,
+                colors = ButtonDefaults.textButtonColors(contentColor = green)
+            ) {
+                Text(if (locating) "…" else "📍 Auto")
+            }
+        },
+        supportingText = supporting,
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = green,
+            focusedLabelColor = green,
+            focusedContainerColor = Color.White,
+            unfocusedContainerColor = Color.White
+        )
+    )
 }
 
 //Plantillas temporales

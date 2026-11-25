@@ -83,6 +83,10 @@ class MapViewModel : ViewModel() {
         _uiState.update { it.copy(apiMarkers = observations) }
     }
 
+    fun setMqttSightings(sightings: List<MapMarkerItem>) {
+        _uiState.update { it.copy(mqttMarkers = sightings)}
+    }
+
     fun addMqttSighting(sighting: MapMarkerItem) {
         _uiState.update { state ->
             state.copy(mqttMarkers = state.mqttMarkers + sighting)

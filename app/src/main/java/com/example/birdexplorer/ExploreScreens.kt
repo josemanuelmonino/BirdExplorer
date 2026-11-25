@@ -51,7 +51,7 @@ import org.osmdroid.util.GeoPoint
 import kotlin.math.ln
 
 // Obtains actual GPS location if there is no error
-private fun fetchLocation(context: Context, onLocation: (Location) -> Unit, onFail: () -> Unit) {
+fun fetchLocation(context: Context, onLocation: (Location) -> Unit, onFail: () -> Unit) {
     val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
     val fine = ContextCompat.checkSelfPermission(
         context, Manifest.permission.ACCESS_FINE_LOCATION
@@ -354,6 +354,20 @@ private fun BirdSighting.toMarkerItem() = MapMarkerItem(
     type = MarkerType.API_OBSERVATION
 )
 
+// MQTT sighting -> marker (only if it has coordinates)
+private fun Sighting.toMarkerItem(): MapMarkerItem? {
+    val la = lat ?: return null
+    val lo = lon ?: return null
+    return MapMarkerItem(
+        id = "mqtt_${timestamp}_$species",
+        title = species,
+        subtitle = if (notes.isBlank()) location else "$location · $notes",
+        latitude = la,
+        longitude = lo,
+        type = MarkerType.MQTT_USER_SIGHTING
+    )
+}
+
 // Zoom that fits the whole region on screen (bigger region -> lower zoom)
 private fun zoomFor(region: SpainRegion): Double {
     val span = maxOf(region.neLat - region.swLat, region.neLng - region.swLng)
@@ -440,6 +454,7 @@ private fun SightingsCarousel(
 fun ExploreByAreaScreen(
     viewModel: BirdViewModel,
     mapViewModel: MapViewModel,
+    mqttSightings: List<Sighting> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -451,6 +466,20 @@ fun ExploreByAreaScreen(
     //The map always draws the same sightings as the list
     LaunchedEffect(uiState.sightings) {
         mapViewModel.setApiObservations(uiState.sightings.map { it.toMarkerItem()})
+    }
+
+    // MQTT pins: all of them, or only those inside the selected region's box
+    LaunchedEffect(mqttSightings, selected) {
+        val region = spainRegions.firstOrNull { it.name == selected }
+        val markers = mqttSightings
+            .mapNotNull { it.toMarkerItem() }
+            .filter { m ->
+                region == null || (
+                        m.latitude in region.swLat..region.neLat &&
+                                m.longitude in region.swLng..region.neLng
+                        )
+            }
+        mapViewModel.setMqttSightings(markers)
     }
 
     Column(modifier = modifier
