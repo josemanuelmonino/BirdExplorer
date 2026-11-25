@@ -1,4 +1,6 @@
+
 package com.example.birdexplorer
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -7,20 +9,43 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.birdexplorer.ui.MapViewModel
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.graphics.graphicsLayer
 
-
-enum class Screens { Home, ExploreNearMe, ExploreByArea, SearchSpecies, ExplorationMode, Sightings, PublishSighting, ViewSightings}
+enum class Screens {
+    Home,
+    ExploreNearMe,
+    ExploreByArea,
+    SearchSpecies,
+    ExplorationMode,
+    Sightings,
+    PublishSighting,
+    ViewSightings
+}
 
 @Composable
-fun BirdExplorerApp(modifier: Modifier = Modifier, mqttViewModel: MqttViewModel) {
-
+fun BirdExplorerApp(
+    modifier: Modifier = Modifier,
+    mqttViewModel: MqttViewModel,
+    explorationViewModel: ExplorationViewModel
+) {
     val navController = rememberNavController()
+    var colorFilterEnabled by rememberSaveable { mutableStateOf(false) }
     val mqttUiState by mqttViewModel.uiState.collectAsState()
 
     NavHost(
         navController = navController,
         startDestination = Screens.Home.name,
-        modifier = modifier
+        modifier = modifier.graphicsLayer {
+            colorFilter = if (colorFilterEnabled) {
+                ColorFilters.deuteranopiaFilter
+            } else {
+                null
+            }
+        }
     ) {
 
         composable(Screens.Home.name) {
@@ -39,34 +64,45 @@ fun BirdExplorerApp(modifier: Modifier = Modifier, mqttViewModel: MqttViewModel)
                 },
                 onPublishSighting = {
                     navController.navigate(Screens.Sightings.name)
-                }
+                },
+                colorFilterEnabled = colorFilterEnabled,
+                onColorFilterChange = { colorFilterEnabled = it }
             )
         }
 
         composable(Screens.ExploreNearMe.name) {
-            PlaceholderScreen("Explore Near Me") {
-                navController.popBackStack()
-            }
+            val birdViewModel: BirdViewModel = viewModel()
+            val mapViewModel: MapViewModel = viewModel()
+
+            ExploreNearMeScreen(
+                viewModel = birdViewModel,
+                mapViewModel = mapViewModel,
+                mqttSightings = mqttUiState.sightings
+            )
         }
 
         composable(Screens.ExploreByArea.name) {
-            PlaceholderScreen("Explore by Area") {
-                navController.popBackStack()
-            }
+            val birdViewModel: BirdViewModel = viewModel()
+            val mapViewModel: MapViewModel = viewModel()
+
+            ExploreByAreaScreen(
+                viewModel = birdViewModel,
+                mapViewModel = mapViewModel,
+                mqttSightings = mqttUiState.sightings
+            )
         }
 
         composable(Screens.SearchSpecies.name) {
-            PlaceholderScreen("Search for a Species") {
-                navController.popBackStack()
-            }
+            val birdViewModel: BirdViewModel = viewModel()
+
+            SearchSpeciesScreen(
+                viewModel = birdViewModel
+            )
         }
 
         composable(Screens.ExplorationMode.name) {
-
-            val viewModel: ExplorationViewModel = viewModel()
-
             ExplorationModeScreen(
-                viewModel = viewModel,
+                viewModel = explorationViewModel,
                 onBack = {
                     navController.popBackStack()
                 },
@@ -75,6 +111,7 @@ fun BirdExplorerApp(modifier: Modifier = Modifier, mqttViewModel: MqttViewModel)
                 }
             )
         }
+
 
         composable(Screens.Sightings.name) {
             SightingsScreen(
@@ -89,12 +126,16 @@ fun BirdExplorerApp(modifier: Modifier = Modifier, mqttViewModel: MqttViewModel)
 
         composable(Screens.PublishSighting.name) {
             PublishSightingScreen(
-                onBack = { navController.popBackStack() },
-                onPublish = { species, location, notes, onResult ->
+                onBack = {
+                    navController.popBackStack()
+                },
+                onPublish = { species, location, notes, lat, lon, onResult ->
                     mqttViewModel.publishSighting(
                         species = species,
                         location = location,
                         notes = notes,
+                        lat = lat,
+                        lon = lon,
                         onResult = onResult
                     )
                 }
@@ -103,7 +144,9 @@ fun BirdExplorerApp(modifier: Modifier = Modifier, mqttViewModel: MqttViewModel)
 
         composable(Screens.ViewSightings.name) {
             ViewSightingsScreen(
-                onBack = { navController.popBackStack() },
+                onBack = {
+                    navController.popBackStack()
+                },
                 sightings = mqttUiState.sightings
             )
         }

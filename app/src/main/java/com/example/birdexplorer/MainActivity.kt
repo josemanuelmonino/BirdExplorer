@@ -10,13 +10,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.Modifier
 import com.example.birdexplorer.ui.theme.BirdExplorerTheme
+import org.osmdroid.config.Configuration
 
 class MainActivity : ComponentActivity() {
 
     private val mqttViewModel: MqttViewModel by viewModels()
+    private val explorationViewModel: ExplorationViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Configuration.getInstance().userAgentValue =
+            "mdp/BirdExplorer" // if we just use userAgentValue = packageName, it returns a package error because it begins with
+                                // com.example (com.example.birdExplorer)
         enableEdgeToEdge()
 
         setContent {
@@ -24,6 +29,7 @@ class MainActivity : ComponentActivity() {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     BirdExplorerApp(
                         mqttViewModel = mqttViewModel,
+                        explorationViewModel = explorationViewModel,
                         modifier = Modifier.padding(innerPadding)
                     )
                 }

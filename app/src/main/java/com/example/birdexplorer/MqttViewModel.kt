@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.collect
 import java.util.UUID
 import org.meshtastic.mqtt.PublishProperties
 
-private const val BROKER = "tcp://192.168.1.83:1883" // IP de ejemplo
+private const val BROKER = "tcp://192.168.1.19:1883"
 private const val PUB_TOPIC = "birdexplorer/sightings"
 private const val SUB_TOPIC = "birdexplorer/sightings/#"
 
@@ -58,6 +58,8 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         species: String,
         location: String,
         notes: String,
+        lat: Double?,
+        lon: Double?,
         onResult: (Boolean) -> Unit
     ) {
         viewModelScope.launch {
@@ -67,6 +69,10 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                     put("location", location)
                     put("notes", notes)
                     put("timestamp", System.currentTimeMillis())
+                    if (lat != null && lon != null) {
+                        put("lat", lat)
+                        put("lon", lon)
+                    }
                 }
 
                 val topic = "$PUB_TOPIC/${UUID.randomUUID()}"
@@ -106,7 +112,9 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                         species = json.getString("species"),
                         location = json.getString("location"),
                         notes = json.getString("notes"),
-                        timestamp = json.getLong("timestamp")
+                        timestamp = json.getLong("timestamp"),
+                        lat = json.optDouble("lat").takeIf { !it.isNaN() },
+                        lon = json.optDouble("lon").takeIf { !it.isNaN() }
                     )
 
                     _uiState.update { currentState ->
