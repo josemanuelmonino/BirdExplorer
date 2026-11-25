@@ -30,6 +30,7 @@ import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.util.BoundingBox
+import org.osmdroid.views.overlay.infowindow.InfoWindow
 import java.util.Locale
 
 // By default, centered around UPM Campus Sur
@@ -68,7 +69,8 @@ fun OsmMap(
     circleRadiusMeters: Double = 500.0,
     onMapLongPress: ((GeoPoint) -> Unit)? = null,
     onZoomChanged: ((Double) -> Unit)? = null,
-    onMarkerClick: ((MapMarkerItem) -> Unit)? = null
+    onMarkerClick: ((MapMarkerItem) -> Unit)? = null,
+    selectedMarkerId: String? = null
 ) {
     val context = LocalContext.current
     val currentOnLongPress by rememberUpdatedState(onMapLongPress)
@@ -179,6 +181,9 @@ fun OsmMap(
                 view.overlays.add(myLocationMarker)
             }
 
+            //When the screen controls the selection, the bubble follows it
+            if (currentOnMarkerClick != null) InfoWindow.closeAllInfoWindowsOn(view)
+
             //Draw bird sighting markers
             markers.forEach { item ->
                 val marker = Marker(view).apply {
@@ -191,11 +196,11 @@ fun OsmMap(
                     relatedObject = item
                     setOnMarkerClickListener { _, _->
                         val handler = currentOnMarkerClick
-                        if (handler != null && item.type == MarkerType.API_OBSERVATION) {
+                        if (handler != null) {
                             handler(item)
-                            true //if handled, no info bubble
+                            true //handled by the screen
                         } else {
-                            false //default behavior is info bubble
+                            false //no callback function, default info bubble
                         }
                     }
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
@@ -209,6 +214,7 @@ fun OsmMap(
                     }
                 }
                 view.overlays.add(marker)
+                if (item.id == selectedMarkerId) marker.showInfoWindow()
             }
 
             view.invalidate()

@@ -16,6 +16,7 @@ data class MapUiState(
     val areaCenter: GeoPoint = DEFAULT_CENTER,
     val areaZoom: Double = 12.0,
     val areaRecenterTrigger: Int = 0,
+    val selectedMarkerId: String? = null,
     val apiMarkers: List<MapMarkerItem> = emptyList(),
     val mqttMarkers: List<MapMarkerItem> = emptyList()
 ) {
@@ -77,6 +78,10 @@ class MapViewModel : ViewModel() {
         }
     }
 
+    fun onMarkerSelected(id: String?) {
+        _uiState.update { it.copy(selectedMarkerId = id) }
+    }
+
     // INTEGRATION FOR API AND MQTT
 
     fun setApiObservations(observations: List<MapMarkerItem>) {
@@ -85,44 +90,5 @@ class MapViewModel : ViewModel() {
 
     fun setMqttSightings(sightings: List<MapMarkerItem>) {
         _uiState.update { it.copy(mqttMarkers = sightings)}
-    }
-
-    fun addMqttSighting(sighting: MapMarkerItem) {
-        _uiState.update { state ->
-            state.copy(mqttMarkers = state.mqttMarkers + sighting)
-        }
-    }
-
-    //SAMPLE MARKERS FOR TESTING
-    companion object {
-        private fun sampleApiMarkers() = listOf(
-            MapMarkerItem(
-                id = "api_101",
-                title = "Gorrión común (Passer domesticus)",
-                subtitle = "Campus Sur UPM, Madrid",
-                latitude = 40.3898,
-                longitude = -3.6282,
-                type = MarkerType.API_OBSERVATION
-            ),
-            MapMarkerItem(
-                id = "api_102",
-                title = "Mirlo común (Turdus merula)",
-                subtitle = "Parque Lineal del Manzanares",
-                latitude = 40.3865,
-                longitude = -3.6310,
-                type = MarkerType.API_OBSERVATION
-            )
-        )
-
-        private fun sampleMqttMarkers() = listOf(
-            MapMarkerItem(
-                id = "mqtt_1",
-                title = "Cotorra argentina",
-                subtitle = "Vistas 3 en los pinos junto a la cafetería",
-                latitude = 40.3905,
-                longitude = -3.6272,
-                type = MarkerType.MQTT_USER_SIGHTING
-            )
-        )
     }
 }

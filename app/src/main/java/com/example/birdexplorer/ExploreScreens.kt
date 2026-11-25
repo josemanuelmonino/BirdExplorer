@@ -10,14 +10,19 @@ import android.location.LocationManager
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.view.RoundedRectBlurRegion
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -31,9 +36,11 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -48,6 +55,9 @@ import com.example.birdexplorer.ui.MapMarkerItem
 import com.example.birdexplorer.ui.MapViewModel
 import com.example.birdexplorer.ui.MarkerType
 import org.osmdroid.util.GeoPoint
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.ln
 
 // Obtains actual GPS location if there is no error
@@ -344,34 +354,81 @@ fun ExploreNearMeScreen(
 
 // ---------- Explore by area ----------
 
+private const val FOCUS_ZOOM = 16.0 //zoom applied when a sighting is selected
+
+//One entry of the carousel/map (both for API and MQTT markers)
+private data class AreaItem(
+    val id: String,
+    val type: MarkerType,
+    val title: String,
+    val scientificName: String? = null,
+    val place: String,
+    val extra: String, //for example, date of the sighting
+    val photoUrl: String?,
+    val latitude: Double,
+    val longitude: Double,
+    val api: BirdSighting? = null,
+    val mqtt: Sighting? = null
+)
+
+private fun formatTimestamp(timestamp: Long): String =
+    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(timestamp))
+
+
 // BirdSighting (iNaturalist) -> marker for the map
-private fun BirdSighting.toMarkerItem() = MapMarkerItem(
+private fun BirdSighting.toAreaItem() = AreaItem(
     id = "api_$id",
+    type = MarkerType.API_OBSERVATION,
     title = commonName,
-    subtitle = place ?: observedOn ?: scientificName,
+    scientificName = scientificName,
+    place = place ?: "Unknown place",
+    extra= observedOn ?: "",
+    photoUrl = photoUrl,
     latitude = lat,
     longitude = lon,
-    type = MarkerType.API_OBSERVATION
+    api = this
 )
 
 // MQTT sighting -> marker (only if it has coordinates)
-private fun Sighting.toMarkerItem(): MapMarkerItem? {
+private fun Sighting.toAreaItem(): AreaItem? {
     val la = lat ?: return null
     val lo = lon ?: return null
-    return MapMarkerItem(
+    return AreaItem(
         id = "mqtt_${timestamp}_$species",
+        type = MarkerType.MQTT_USER_SIGHTING,
         title = species,
-        subtitle = if (notes.isBlank()) location else "$location · $notes",
+        place = location,
+        extra = formatTimestamp(timestamp),
+        photoUrl = null,
         latitude = la,
         longitude = lo,
-        type = MarkerType.MQTT_USER_SIGHTING
+        mqtt = this
     )
 }
+
+private fun AreaItem.toMarkerItem() = MapMarkerItem(
+    id = id,
+    title = title,
+    subtitle = if (mqtt != null && mqtt.notes.isNotBlank()) "$place - ${mqtt.notes}" else place,
+    latitude = latitude,
+    longitude = longitude,
+    type = type
+)
 
 // Zoom that fits the whole region on screen (bigger region -> lower zoom)
 private fun zoomFor(region: SpainRegion): Double {
     val span = maxOf(region.neLat - region.swLat, region.neLng - region.swLng)
     return (ln(1400.0 / span) / ln(2.0)).toInt().coerceIn(5, 10).toDouble()
+}
+
+// Opens any maps app on the given place
+private fun openInMaps(context: Context, lat: Double, lon: Double, label: String) {
+    val uri = Uri.parse("geo:$lat,$lon?q=$lat,$lon(${Uri.encode(label)})")
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+    } catch (e: ActivityNotFoundException) {
+        Toast.makeText(context, "No maps app found", Toast.LENGTH_SHORT).show()
+    }
 }
 
 @Composable
@@ -385,13 +442,76 @@ private fun ViewToggleButton(
     else OutlinedButton(onClick = onClick, modifier = modifier) { Text(text) }
 }
 
+// Small label that tells where a sighting comes from
+@Composable
+private fun SourceBadge(type: MarkerType) {
+    val isApi = type == MarkerType.API_OBSERVATION
+    Surface(
+        shape = RoundedCornerShape(4.dp),
+        color = if (isApi) MaterialTheme.colorScheme.primaryContainer
+        else MaterialTheme.colorScheme.tertiaryContainer
+    ) {
+        Text(
+            text = if (isApi) "API" else "MQTT",
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+        )
+    }
+}
+
+// Detail of a sighting published by a user through MQTT
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MqttDetailSheet(sighting: Sighting, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            SourceBadge(MarkerType.MQTT_USER_SIGHTING)
+            Text(sighting.species, style = MaterialTheme.typography.titleLarge)
+            Text("Date: ${formatTimestamp(sighting.timestamp)}")
+            Text("Place: ${sighting.location}")
+            if (sighting.notes.isNotBlank()) Text("Notes: ${sighting.notes}")
+
+            val la = sighting.lat
+            val lo = sighting.lon
+            if (la != null && lo != null) {
+                Text("Coordinates: %.4f, %.4f".format(la, lo))
+                Button(
+                    onClick = { openInMaps(context, la, lo, sighting.species) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("How to get there")
+                }
+            }
+        }
+    }
+}
+
 // Bottom panel of the map: one card per sighting, like the list of Google Maps
 @Composable
 private fun SightingsCarousel(
-    sightings: List<BirdSighting>,
-    onSightingClick: (BirdSighting) -> Unit,
+    areaItems: List<AreaItem>,
+    selectedId: String?,
+    onItemClick: (AreaItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val listState = rememberLazyListState()
+
+    // When a pin is selected, the carousel scrolls to its card
+    LaunchedEffect(selectedId) {
+        val index = areaItems.indexOfFirst { it.id == selectedId}
+        if (index >= 0) listState.animateScrollToItem(index)
+    }
+
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
@@ -399,50 +519,74 @@ private fun SightingsCarousel(
         tonalElevation = 3.dp
     ) {
         Column(Modifier.padding(vertical = 10.dp)) {
-            val word = if (sightings.size == 1) "sighting" else "sightings"
+            val word = if (areaItems.size == 1) "sighting" else "sightings"
             Text(
-                text = "${sightings.size} $word",
+                text = "${areaItems.size} $word - Tap once to locate, twice for details",
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
             )
             LazyRow(
+                state = listState,
                 contentPadding = PaddingValues(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(sightings) { s ->
-                    Card(modifier = Modifier.width(260.dp)) {
-                        Row(
-                            modifier = Modifier
-                                .clickable { onSightingClick(s) }
-                                .padding(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                items(areaItems, key = { it.id }) { item ->
+                    Card(
+                        modifier = Modifier.width(260.dp),
+                        border = if (item.id == selectedId)
+                            BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
                         ) {
-                            AsyncImage(
-                                model = s.photoUrl,
-                                contentDescription = s.commonName,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.size(64.dp).clip(RoundedCornerShape(8.dp))
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Column {
-                                Text(
-                                    s.commonName,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    s.place ?: "Unknown place",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    s.observedOn ?: "",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
+                            Row(
+                                modifier = Modifier
+                                    .clickable { onItemClick(item) }
+                                    .padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (item.photoUrl != null) {
+                                    AsyncImage(
+                                        model = item.photoUrl,
+                                        contentDescription = item.title,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.size(64.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                    )
+                                } else {
+                                    // MQTT sightings have no photo
+                                    Box(
+                                        modifier = Modifier
+                                            .size(64.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(MaterialTheme.colorScheme.secondaryContainer),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Image(
+                                            painter = painterResource(R.drawable.ic_marker_mqtt),
+                                            contentDescription = "User sighting",
+                                            modifier = Modifier.size(32.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    SourceBadge(item.type)
+                                    Text(
+                                        item.title,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        item.place,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        item.extra,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
                             }
-                        }
                     }
                 }
             }
@@ -454,32 +598,52 @@ private fun SightingsCarousel(
 fun ExploreByAreaScreen(
     viewModel: BirdViewModel,
     mapViewModel: MapViewModel,
-    mqttSightings: List<Sighting> = emptyList(),
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    mqttSightings: List<Sighting> = emptyList()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val mapState by mapViewModel.uiState.collectAsState()
     ScreenEffects(uiState, viewModel)
 
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
     var showMap by rememberSaveable { mutableStateOf(false) } //list is the one active by default
+    var mqttDetail by remember { mutableStateOf<Sighting?>(null)}
 
-    //The map always draws the same sightings as the list
-    LaunchedEffect(uiState.sightings) {
-        mapViewModel.setApiObservations(uiState.sightings.map { it.toMarkerItem()})
-    }
+    val region = spainRegions.firstOrNull { it.name == selected }
 
-    // MQTT pins: all of them, or only those inside the selected region's box
-    LaunchedEffect(mqttSightings, selected) {
-        val region = spainRegions.firstOrNull { it.name == selected }
-        val markers = mqttSightings
-            .mapNotNull { it.toMarkerItem() }
+    // Everything the map and the carousel show: MQTT first, then API.
+    // MQTT ones are filtered by the region box, distinctBy avoids duplicates (retained messages)
+    val areaItems = remember(uiState.sightings, mqttSightings, region) {
+        val mqtt = mqttSightings
+            .mapNotNull { it.toAreaItem() }
             .filter { m ->
                 region == null || (
                         m.latitude in region.swLat..region.neLat &&
                                 m.longitude in region.swLng..region.neLng
                         )
             }
-        mapViewModel.setMqttSightings(markers)
+        (mqtt + uiState.sightings.map { it.toAreaItem() }).distinctBy { it.id }
+    }
+
+    // The map always draws the same sightings as the carousel
+    LaunchedEffect(areaItems) {
+        mapViewModel.setApiObservations(
+            areaItems.filter { it.type == MarkerType.API_OBSERVATION }.map {it.toMarkerItem()}
+        )
+        mapViewModel.setMqttSightings(
+            areaItems.filter { it.type == MarkerType.MQTT_USER_SIGHTING }.map {it.toMarkerItem()}
+        )
+    }
+
+    // First tap: select + zoom to the pin. Second tap on the same one: full detail
+    fun onItemTapped(item: AreaItem) {
+        if (mapState.selectedMarkerId == item.id) {
+            item.api?.let { viewModel.selectSighting(it) }
+            item.mqtt?.let { mqttDetail = it }
+        } else {
+            mapViewModel.onMarkerSelected(item.id)
+            mapViewModel.onAreaCenterSelected(GeoPoint(item.latitude, item.longitude), FOCUS_ZOOM)
+        }
     }
 
     Column(modifier = modifier
@@ -507,21 +671,22 @@ fun ExploreByAreaScreen(
 
         //Region filter: loads the sightings and moves the map to that region
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(spainRegions) { region ->
+            items(spainRegions) { r ->
                 FilterChip(
-                    selected = selected == region.name,
+                    selected = selected == r.name,
                     onClick = {
-                        selected = region.name
-                        viewModel.loadByArea(region.neLat, region.neLng, region.swLat, region.swLng)
+                        selected = r.name
+                        mapViewModel.onMarkerSelected(null)
+                        viewModel.loadByArea(r.neLat, r.neLng, r.swLat, r.swLng)
                         mapViewModel.onAreaCenterSelected(
                             GeoPoint(
-                                (region.neLat + region.swLat) / 2,
-                                (region.neLng + region.swLng) / 2
+                                (r.neLat + r.swLat) / 2,
+                                (r.neLng + r.swLng) / 2
                             ),
-                            zoomFor(region)
+                            zoomFor(r)
                         )
                     },
-                    label = { Text(region.name) }
+                    label = { Text(r.name) }
                 )
             }
         }
@@ -537,16 +702,17 @@ fun ExploreByAreaScreen(
                 ExploreAreaScreen(
                     mapViewModel = mapViewModel,
                     showSearchBar = false,
-                    onMarkerClick =  { item ->
-                        uiState.sightings
-                            .firstOrNull { "api_${it.id}" == item.id }
-                            ?.let(viewModel::selectSighting)
+                    onMarkerClick =  { marker ->
+                        areaItems
+                            .firstOrNull { it.id == marker.id }
+                            ?.let{onItemTapped(it)}
                     }
                 )
-                if (uiState.sightings.isNotEmpty()) {
+                if (areaItems.isNotEmpty()) {
                     SightingsCarousel(
-                        sightings = uiState.sightings,
-                        onSightingClick = viewModel::selectSighting,
+                        areaItems = areaItems,
+                        selectedId = mapState.selectedMarkerId,
+                        {onItemTapped(it)},
                         modifier = Modifier.align(Alignment.BottomCenter)
                     )
                 }
@@ -564,6 +730,9 @@ fun ExploreByAreaScreen(
             )
         }
     }
+
+    //Detail of an MQTT sighting (the API ones are shown by ScreenEffects)
+    mqttDetail?.let { MqttDetailSheet(it, onDismiss = { mqttDetail = null }) }
 }
 
 // ---------- Search for a species ----------

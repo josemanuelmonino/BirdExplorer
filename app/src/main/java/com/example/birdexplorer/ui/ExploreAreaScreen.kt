@@ -164,7 +164,8 @@ fun ExploreAreaScreen(
             markers = allMarkers,
             userLocation = uiState.userLocation,
             circleCenter = null, // No radius circle in Explore by Area mode
-            onMarkerClick = onMarkerClick
+            onMarkerClick = onMarkerClick,
+            selectedMarkerId = uiState.selectedMarkerId
         )
 
         // Top controls: Back (only if a callback is given) + Map style selector
