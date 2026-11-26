@@ -5,7 +5,7 @@ import retrofit2.http.Query
 
 const val BASE_URL = "https://api.inaturalist.org/"
 const val BIRDS_TAXON_ID = 3
-const val SPAIN_PLACE_ID = 6753   // iNaturalist place id for Spain, used to limit the results to the country
+const val SPAIN_PLACE_ID = 6774   // iNaturalist place id for Spain, used to limit the results to the country
 
 // main interface
 interface INatApiService {
