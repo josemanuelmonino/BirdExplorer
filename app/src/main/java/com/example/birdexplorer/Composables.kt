@@ -72,7 +72,8 @@ fun HomeScreen(
     onExplorationMode: () -> Unit,
     onPublishSighting: () -> Unit,
     colorFilterEnabled: Boolean,
-    onColorFilterChange: (Boolean) -> Unit
+    onColorFilterChange: (Boolean) -> Unit,
+    onOpenBrokerSettings: () -> Unit = {}
 ) {
     val isPortrait = (
             LocalConfiguration.current.orientation ==
@@ -117,6 +118,8 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.End
                 ) {
+                    TextButton(onClick = onOpenBrokerSettings) { Text("MQTT broker") }
+
                     Text(
                         text = "Colorblind Mode",
                         style = MaterialTheme.typography.bodySmall,
@@ -212,6 +215,8 @@ fun HomeScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.End
                     ) {
+                        TextButton(onClick = onOpenBrokerSettings) { Text("MQTT broker") }
+
                         Text(
                             text = "Colorblind Mode",
                             style = MaterialTheme.typography.bodySmall,

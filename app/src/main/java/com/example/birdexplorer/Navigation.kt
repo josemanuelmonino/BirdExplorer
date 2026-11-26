@@ -1,6 +1,10 @@
 
 package com.example.birdexplorer
 
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -27,6 +31,33 @@ enum class Screens {
 }
 
 @Composable
+fun BrokerDialog(
+    currentUrl: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var text by rememberSaveable { mutableStateOf(currentUrl) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("MQTT broker") },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("IP or URL (e.g. 192.168.1.50)") },
+                singleLine = true
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(text); onDismiss() }) { Text("Save") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
 fun BirdExplorerApp(
     modifier: Modifier = Modifier,
     mqttViewModel: MqttViewModel,
@@ -35,6 +66,16 @@ fun BirdExplorerApp(
     val navController = rememberNavController()
     var colorFilterEnabled by rememberSaveable { mutableStateOf(false) }
     val mqttUiState by mqttViewModel.uiState.collectAsState()
+    val brokerUrl by mqttViewModel.brokerUrl.collectAsState()
+    var showBrokerDialog by rememberSaveable { mutableStateOf(false) }
+
+    if (showBrokerDialog) {
+        BrokerDialog(
+            currentUrl = brokerUrl,
+            onDismiss = { showBrokerDialog = false },
+            onSave = { mqttViewModel.changeBroker(it) }
+        )
+    }
 
     NavHost(
         navController = navController,
@@ -66,7 +107,8 @@ fun BirdExplorerApp(
                     navController.navigate(Screens.Sightings.name)
                 },
                 colorFilterEnabled = colorFilterEnabled,
-                onColorFilterChange = { colorFilterEnabled = it }
+                onColorFilterChange = { colorFilterEnabled = it },
+                onOpenBrokerSettings = { showBrokerDialog = true }
             )
         }
 

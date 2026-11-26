@@ -1,6 +1,7 @@
 package com.example.birdexplorer
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import org.meshtastic.mqtt.MqttClient
 import org.meshtastic.mqtt.transport.tcp.TcpTransportFactory
@@ -19,7 +20,9 @@ import kotlinx.coroutines.flow.collect
 import java.util.UUID
 import org.meshtastic.mqtt.PublishProperties
 
-private const val BROKER = "tcp://192.168.1.19:1883"
+private const val DEFAULT_BROKER = "tcp://192.168.1.19:1883"
+private const val PREFS = "birdexplorer_prefs"
+private const val KEY_BROKER = "broker_url"
 private const val PUB_TOPIC = "birdexplorer/sightings"
 private const val SUB_TOPIC = "birdexplorer/sightings/#"
 
@@ -30,6 +33,13 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         autoReconnect = true
         keepAliveSeconds = 30
     }
+
+    private val prefs = application.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    private val _brokerUrl = MutableStateFlow(
+        prefs.getString(KEY_BROKER, DEFAULT_BROKER) ?: DEFAULT_BROKER
+    )
+    val brokerUrl: StateFlow<String> = _brokerUrl.asStateFlow()
 
     private val _uiState = MutableStateFlow(MqttUiState())
     val uiState: StateFlow<MqttUiState> = _uiState.asStateFlow()
@@ -42,7 +52,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     private fun connectAndSubscribe() {
         viewModelScope.launch {
             try {
-                client.connect(MqttEndpoint.parse(BROKER))
+                client.connect(MqttEndpoint.parse(_brokerUrl.value))
                 client.subscribe(SUB_TOPIC, QoS.AT_LEAST_ONCE)
 
                 Log.d("BirdExplorerMQTT", "Connected and subscribed")
@@ -50,6 +60,20 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 Log.e("BirdExplorerMQTT", "MQTT connection error", e)
             }
+        }
+    }
+
+    fun changeBroker(input: String) {
+        var url = input.trim()
+        if (!url.startsWith("tcp://")) url = "tcp://$url"
+        if (url.count { it == ':' } < 2) url += ":1883"   // default port
+
+        prefs.edit().putString(KEY_BROKER, url).apply()
+        _brokerUrl.value = url
+
+        viewModelScope.launch {
+            try { client.disconnect() } catch (_: Exception) {}
+            connectAndSubscribe()
         }
     }
 
@@ -84,8 +108,8 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                     retain = true,
                     properties = PublishProperties(
                         messageExpiryInterval = 1296000L //15 dias
-                                // messageExpiryInterval = 604800L // 7 dias
-                                // messageExpiryInterval = 60L //60s (pruebas)
+                        // messageExpiryInterval = 604800L // 7 dias
+                        // messageExpiryInterval = 60L //60s (pruebas)
                     )
                 )
                 val properties = PublishProperties()
